@@ -1,0 +1,285 @@
+@import "tailwindcss";
+
+@variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: 'Satoshi', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: var(--font-jetbrains-mono);
+  --color-gray-250: #dadce0;
+  --color-gray-350: #b8bcc4;
+}
+
+/* Always show scrollbar to prevent layout shift */
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+/* Premium Typography */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+}
+
+/* Tech-style labels */
+.label-tech, .badge, .table-header {
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Glass borders and depth */
+:root {
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-medium: rgba(0, 0, 0, 0.1);
+  --bg-glass: rgba(0, 0, 0, 0.02);
+}
+
+.dark {
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-medium: rgba(255, 255, 255, 0.1);
+  --bg-glass: rgba(255, 255, 255, 0.02);
+}
+
+/* Glass card effect */
+.glass-card {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-glass);
+  backdrop-filter: blur(8px);
+}
+
+.glass-border {
+  border: 1px solid var(--border-subtle);
+}
+
+.glass-bg {
+  background: var(--bg-glass);
+}
+
+/* Glow effects (dark theme only) */
+.glow-primary {
+  transition: box-shadow 0.2s ease;
+}
+
+.dark .glow-primary {
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
+}
+
+.dark .glow-primary:hover {
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.4);
+}
+
+.dark .glow-logo {
+  filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.3));
+}
+
+.dark .glow-success {
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
+}
+
+/* Light theme uses enhanced shadows instead */
+.glow-primary {
+  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.25);
+}
+
+.glow-primary:hover {
+  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.35);
+}
+
+/* Smooth transitions and micro-animations */
+button, a, input, select, textarea {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Button hover lift */
+button:not(:disabled) {
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+button:not(:disabled):active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Link underline animation */
+a.link-animate {
+  position: relative;
+  transition: color 0.15s ease;
+}
+
+a.link-animate::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: currentColor;
+  transition: width 0.2s ease;
+}
+
+a.link-animate:hover::after {
+  width: 100%;
+}
+
+/* Nav item hover */
+nav a, nav button {
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+
+/* Refined status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Active status */
+.badge-active {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #22C55E;
+}
+
+.dark .badge-active {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #22C55E;
+}
+
+.badge-active::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse-badge 2s infinite;
+}
+
+/* Upcoming status */
+.badge-upcoming {
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  color: #F97316;
+}
+
+.dark .badge-upcoming {
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  color: #F97316;
+}
+
+/* Ended status */
+.badge-ended {
+  background: rgba(107, 114, 128, 0.1);
+  border: 1px solid rgba(107, 114, 128, 0.2);
+  color: #6B7280;
+}
+
+.dark .badge-ended {
+  background: rgba(107, 114, 128, 0.1);
+  border: 1px solid rgba(107, 114, 128, 0.2);
+  color: #9CA3AF;
+}
+
+/* Pulse animation for active dot */
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Position datetime-local calendar button on the right */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+/* Light calendar icon in dark mode */
+.dark input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgb(229 231 235); /* gray-200 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(156 163 175); /* gray-400 */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(107 114 128); /* gray-500 */
+}
+
+/* Dark scrollbar in dark mode */
+.dark ::-webkit-scrollbar-track {
+  background: rgb(31 41 55); /* gray-800 */
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgb(75 85 99); /* gray-600 */
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgb(107 114 128); /* gray-500 */
+}
+
+/* Premium header with blur */
+header {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* Block gradient behind header while keeping transparency for other elements */
+header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  opacity: 0.2;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Enhance nav item active state */
+nav a.glass-card, nav button.glass-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.dark nav a.glass-card, .dark nav button.glass-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Float animation for decorative blocks */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(var(--rotate, 0deg));
+  }
+  25% {
+    transform: translateY(-15px) translateX(8px) rotate(calc(var(--rotate, 0deg) + 3deg));
+  }
+  50% {
+    transform: translateY(-30px) rotate(calc(var(--rotate, 0deg) + 8deg));
+  }
+  75% {
+    transform: translateY(-15px) translateX(-8px) rotate(calc(var(--rotate, 0deg) + 3deg));
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
