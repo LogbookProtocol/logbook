@@ -18,9 +18,6 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Logbook',
   description: 'Logbook is the system of record for on-chain campaigns — where collective intent becomes immutable outcomes',
-  icons: {
-    icon: '/favicon.svg',
-  },
 };
 
 export default function RootLayout({
@@ -31,6 +28,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="icon" href="/favicon-light.svg" media="(prefers-color-scheme: light)" />
+        <link rel="icon" href="/favicon-dark.svg" media="(prefers-color-scheme: dark)" />
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
         <script
