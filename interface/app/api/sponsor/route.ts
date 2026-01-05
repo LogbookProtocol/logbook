@@ -10,6 +10,8 @@ import {
   getRemainingSponsorship,
 } from '@/lib/sponsorship-store';
 
+export const runtime = 'edge';
+
 // Transaction types we can detect
 type TransactionType = 'create_campaign' | 'submit_response' | 'unknown';
 
@@ -40,9 +42,8 @@ function getTreasuryKeypair(): Ed25519Keypair {
   }
 
   // Handle hex format (0x... or raw hex)
-  const keyBytes = privateKey.startsWith('0x')
-    ? Buffer.from(privateKey.slice(2), 'hex')
-    : Buffer.from(privateKey, 'hex');
+  const hexStr = privateKey.startsWith('0x') ? privateKey.slice(2) : privateKey;
+  const keyBytes = new Uint8Array(hexStr.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
 
   return Ed25519Keypair.fromSecretKey(keyBytes);
 }
