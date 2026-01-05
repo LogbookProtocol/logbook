@@ -28,8 +28,8 @@ interface Response {
   // Label info
   label: {
     name: string;
-    company: string; // Space name, empty if no space
-    campaign: string; // Campaign name when no space
+    company: string; // Deprecated, not used
+    campaign: string; // Campaign name
     action: string;
     avatarColor: string;
     authType: 'google' | 'sui' | 'slush' | 'nightly' | 'suiet'; // How user is logged in
@@ -66,17 +66,20 @@ const GRID_COLS = 20;
 const MAX_ROWS = 6;
 const TOTAL_BLOCKS = 121; // 6 rows × 20 cols + 1 top block = 11² = 121
 
-const NAMES = ['Alex', 'Maria', 'John', 'Sarah', 'Mike', 'Emma', 'David', 'Lisa', 'Tom', 'Anna', 'Chris', 'Julia'];
-const COMPANIES = ['Nexus DAO', 'Acme Corp', 'TechFlow', 'DataSync', 'CloudBase', 'DevHub', 'CodeLab', 'ByteWorks'];
-const ACTIONS = [
-  { text: 'voted Yes on Proposal #42', icon: '✓' },
-  { text: 'registered for Annual Summit', icon: '📅' },
-  { text: 'submitted feedback', icon: '💬' },
-  { text: 'joined the team', icon: '👋' },
-  { text: 'completed Q4 survey', icon: '📋' },
-  { text: 'approved budget request', icon: '✓' },
-  { text: 'signed partnership agreement', icon: '✍' },
-  { text: 'confirmed attendance', icon: '✓' },
+const NAMES = ['Alex', 'Maria', 'John', 'Sarah', 'Mike', 'Emma', 'David', 'Lisa', 'Tom', 'Anna', 'Chris', 'Julia', 'James', 'Sophie', 'Max', 'Nina'];
+
+// Campaign data with matching actions
+const CAMPAIGN_DATA = [
+  { name: 'Q4 Budget Allocation', actions: ['voted "Yes"', 'voted "No"', 'abstained'] },
+  { name: 'New Office Location', actions: ['voted "Berlin"', 'voted "London"', 'voted "Remote"'] },
+  { name: 'Product Roadmap 2025', actions: ['submitted feedback', 'shared priorities'] },
+  { name: 'Team Retreat Poll', actions: ['voted "Mountains"', 'voted "Beach"', 'voted "City"'] },
+  { name: 'Governance Proposal #12', actions: ['voted "For"', 'voted "Against"'] },
+  { name: 'Feature Priority Survey', actions: ['completed survey', 'ranked features'] },
+  { name: 'Company Values Poll', actions: ['submitted response', 'shared opinion'] },
+  { name: 'Work Schedule Survey', actions: ['voted "Hybrid"', 'voted "Remote"', 'voted "Office"'] },
+  { name: 'Tech Stack Decision', actions: ['voted "React"', 'voted "Vue"', 'voted "Svelte"'] },
+  { name: 'Annual Satisfaction Survey', actions: ['completed survey', 'gave feedback'] },
 ];
 const AVATAR_COLORS = [
   '#22d3ee', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#10b981', '#6366f1',
@@ -92,16 +95,16 @@ function generateSuiAddress(): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-const CAMPAIGNS = ['Q4 Budget Vote', 'Team Offsite RSVP', 'Product Feedback', 'Hackathon Registration', 'Community Survey'];
-
 const AUTH_TYPES = ['google', 'sui', 'slush', 'nightly', 'suiet'] as const;
 const WALLET_TYPES = ['sui', 'slush', 'nightly', 'suiet'] as const;
 
 function getRandomLabel() {
-  const action = ACTIONS[Math.floor(Math.random() * ACTIONS.length)];
+  // Pick a random campaign and matching action
+  const campaignData = CAMPAIGN_DATA[Math.floor(Math.random() * CAMPAIGN_DATA.length)];
+  const action = campaignData.actions[Math.floor(Math.random() * campaignData.actions.length)];
 
   // Pick auth type: 50% Google, 50% wallet
-  const authType = Math.random() < 0.5
+  const authType: typeof AUTH_TYPES[number] = Math.random() < 0.5
     ? 'google'
     : WALLET_TYPES[Math.floor(Math.random() * WALLET_TYPES.length)];
 
@@ -110,24 +113,11 @@ function getRandomLabel() {
     ? NAMES[Math.floor(Math.random() * NAMES.length)]
     : generateSuiAddress();
 
-  // 20% chance no space (campaign without space), 20% campaign name, 60% space name
-  const rand = Math.random();
-  let company: string;
-  if (rand < 0.2) {
-    // No space - show campaign name only
-    company = CAMPAIGNS[Math.floor(Math.random() * CAMPAIGNS.length)];
-  } else if (rand < 0.4) {
-    // Campaign within a space - show both
-    company = COMPANIES[Math.floor(Math.random() * COMPANIES.length)];
-  } else {
-    company = COMPANIES[Math.floor(Math.random() * COMPANIES.length)];
-  }
-
   return {
     name,
-    company: rand < 0.2 ? '' : company, // Empty string means no space
-    campaign: rand < 0.2 ? CAMPAIGNS[Math.floor(Math.random() * CAMPAIGNS.length)] : '',
-    action: action.text,
+    company: '', // No longer used
+    campaign: campaignData.name,
+    action,
     avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
     authType,
   };
@@ -680,10 +670,8 @@ export function FloatingBlocks() {
             const padding = 12;
             const textStartX = padding + avatarSize + 16; // avatar area + gap
 
-            // Determine second line text (space or campaign)
-            const secondLineText = resp.label.company
-              ? `@ ${resp.label.company}`
-              : resp.label.campaign;
+            // Campaign name as second line
+            const secondLineText = resp.label.campaign;
 
             // Measure text widths to calculate card width
             ctx.font = 'bold 13px system-ui, sans-serif';

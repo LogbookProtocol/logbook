@@ -19,14 +19,16 @@ export interface FieldUpdate {
 
 export interface UploadedFile {
   id: string;
-  file: File;
+  file?: File;
   name: string;
   size: number;
   type: string;
-  status: 'uploading' | 'processing' | 'completed' | 'error';
+  status?: 'uploading' | 'processing' | 'completed' | 'error';
   extractedData?: any;
-  progress: number;
+  parsedData?: ParsedFileData;
+  progress?: number;
   error?: string;
+  uploadedAt?: Date;
 }
 
 export interface PersonalityConfig {

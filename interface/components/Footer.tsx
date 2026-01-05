@@ -28,79 +28,29 @@ const SuiIcon = ({ className }: { className?: string }) => (
 
 export function Footer() {
   return (
-    <footer className="relative z-10 mt-auto border-t border-gray-200/50 dark:border-white/[0.06] bg-gray-50 dark:bg-gray-950">
-      <div className="max-w-[1200px] mx-auto px-6 py-12">
-
-        {/* Main footer content */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-
-          {/* Brand column */}
-          <div className="col-span-1">
-            <div className="text-xl font-bold mb-3">
-              <span className="text-gray-900 dark:text-white">
-                Logbook
-              </span>
-            </div>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
-              Turn participation into<br />permanent records.
-            </p>
-            {/* Social links */}
-            <div className="flex gap-3">
-              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 dark:text-gray-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
-                <TwitterIcon className="w-5 h-5" />
-              </a>
-              <a href="https://discord.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 dark:text-gray-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
-                <DiscordIcon className="w-5 h-5" />
-              </a>
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 dark:text-gray-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
-                <GitHubIcon className="w-5 h-5" />
-              </a>
-            </div>
-          </div>
-
-          {/* Product column */}
-          <div>
-            <h4 className="text-gray-900 dark:text-white font-medium mb-4">Product</h4>
-            <ul className="space-y-2">
-              <li><Link href="/campaigns" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">Campaigns</Link></li>
-              <li><Link href="/spaces" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">Spaces</Link></li>
-              <li><Link href="/campaigns/new" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">New Campaign</Link></li>
-            </ul>
-          </div>
-
-          {/* Resources column */}
-          <div>
-            <h4 className="text-gray-900 dark:text-white font-medium mb-4">Resources</h4>
-            <ul className="space-y-2">
-              <li><Link href="/docs" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">Documentation</Link></li>
-              <li><Link href="/security" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">Security</Link></li>
-              <li><Link href="/stats" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">Stats</Link></li>
-              <li><a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">GitHub</a></li>
-            </ul>
-          </div>
-
-          {/* Legal column */}
-          <div>
-            <h4 className="text-gray-900 dark:text-white font-medium mb-4">Legal</h4>
-            <ul className="space-y-2">
-              <li><Link href="/terms" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">Terms of Service</Link></li>
-              <li><Link href="/privacy" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm">Privacy Policy</Link></li>
-            </ul>
-          </div>
-
-        </div>
-
-        {/* Bottom bar */}
-        <div className="pt-8 border-t border-gray-200/50 dark:border-white/[0.06] flex flex-col md:flex-row justify-between items-center gap-4">
+    <footer className="relative z-10 mt-auto border-t border-gray-200/50 dark:border-white/[0.06] bg-gray-50 dark:bg-white/[0.02]">
+      <div className="max-w-[1200px] mx-auto px-6 py-8">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          {/* Left: Copyright */}
           <p className="text-gray-400 dark:text-gray-500 text-sm">
-            © 2025 Logbook. All rights reserved.
+            © 2025 Logbook<sup className="text-[0.7em] font-semibold ml-0.5">β</sup>
           </p>
-          <a href="https://sui.io" target="_blank" rel="noopener noreferrer" className="text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400 text-sm flex items-center gap-1.5 transition-colors">
-            <SuiIcon className="w-3.5 h-4" />
-            Built on Sui
+
+          {/* Center: Links */}
+          <nav className="flex items-center gap-6">
+            <Link href="/docs" className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors text-sm">Docs</Link>
+            <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors text-sm">GitHub</a>
+            <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors text-sm">Twitter</a>
+            <a href="https://discord.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors text-sm">Discord</a>
+          </nav>
+
+          {/* Right: Built on Sui */}
+          <a href="https://sui.io" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400 transition-colors">
+            Built on
+            <SuiIcon className="w-3 h-3.5" />
+            Sui
           </a>
         </div>
-
       </div>
     </footer>
   );

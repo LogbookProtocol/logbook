@@ -1,44 +1,122 @@
 'use client';
 
 import { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { saveReferrer } from '@/lib/navigation';
 
 interface StepCardProps {
-  number: string;
   title: string;
   description: string;
   icon: ReactNode;
+  badge?: 'creator' | 'participant' | 'both' | 'anyone';
+  button?: ReactNode;
 }
 
-function StepCard({ number, title, description, icon }: StepCardProps) {
+function StepCard({ title, description, icon, badge, button }: StepCardProps) {
   return (
-    <div className="relative text-center">
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center text-white text-sm font-bold">
-        {number}
-      </div>
-      <div className="pt-8 p-6 rounded-2xl bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 h-full">
+    <div className="text-center">
+      <div className="p-6 rounded-2xl bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 h-full flex flex-col">
         <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-cyan-500/10 flex items-center justify-center">
           {icon}
         </div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
         <p className="text-gray-600 dark:text-gray-400 text-sm">{description}</p>
+        {/* Spacer + Button centered vertically */}
+        <div className="flex-1 flex items-center justify-center">
+          {button && <div className="mt-3">{button}</div>}
+        </div>
+        {/* Badge at bottom */}
+        <div className="flex justify-center gap-1 mt-3">
+          {badge === 'both' ? (
+            <>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">
+                Creator
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400">
+                Participant
+              </span>
+            </>
+          ) : badge && (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+              badge === 'creator'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400'
+                : badge === 'participant'
+                ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400'
+                : 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'
+            }`}>
+              {badge === 'creator' ? 'Creator' : badge === 'participant' ? 'Participant' : 'Anyone'}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 export function HowItWorksSection() {
-  return (
-    <section className="py-24 px-6">
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-4xl font-bold text-center text-gray-900 dark:text-white mb-16">
-          How it works
-        </h2>
+  const router = useRouter();
+  const { requireAuth, isConnected, openLoginModal } = useAuth();
 
-        <div className="grid md:grid-cols-4 gap-8">
+  const handleSignIn = () => {
+    if (!isConnected) {
+      openLoginModal();
+    }
+  };
+
+  const handleCreateCampaign = () => {
+    const targetPath = '/campaigns/new';
+    if (requireAuth(targetPath)) {
+      saveReferrer(targetPath);
+      router.push(targetPath);
+    }
+  };
+
+  return (
+    <section className="py-20 px-6 bg-gray-50 dark:bg-white/[0.02]">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl md:text-4xl font-bold text-center text-gray-900 dark:text-white mb-4">
+          How Logbook works
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400 text-center mb-16 max-w-2xl mx-auto">
+          From sign-in to verified results in five steps.
+        </p>
+
+        <div className="grid md:grid-cols-5 gap-6 mb-10">
           <StepCard
-            number="1"
+            title="Sign in"
+            description="Connect with Google account or Sui wallet"
+            badge="both"
+            icon={
+              <svg
+                className="w-6 h-6 text-cyan-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
+              </svg>
+            }
+            button={
+              !isConnected ? (
+                <button
+                  onClick={handleSignIn}
+                  className="px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-xs font-medium hover:border-cyan-500 hover:text-cyan-600 dark:hover:border-cyan-500 dark:hover:text-cyan-400 transition"
+                >
+                  Sign in
+                </button>
+              ) : null
+            }
+          />
+          <StepCard
             title="Create"
-            description="Set up your campaign — questions, access rules, timeline"
+            description="Set up your campaign — questions and timeline"
+            badge="creator"
             icon={
               <svg
                 className="w-6 h-6 text-cyan-500"
@@ -54,11 +132,19 @@ export function HowItWorksSection() {
                 />
               </svg>
             }
+            button={
+              <button
+                onClick={handleCreateCampaign}
+                className="px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-xs font-medium hover:border-cyan-500 hover:text-cyan-600 dark:hover:border-cyan-500 dark:hover:text-cyan-400 transition"
+              >
+                New Campaign
+              </button>
+            }
           />
           <StepCard
-            number="2"
             title="Share"
-            description="Invite participants via link, whitelist, or Space membership"
+            description="Invite participants via link"
+            badge="creator"
             icon={
               <svg
                 className="w-6 h-6 text-cyan-500"
@@ -76,9 +162,9 @@ export function HowItWorksSection() {
             }
           />
           <StepCard
-            number="3"
-            title="Participate"
-            description="Gasless responses with zkLogin — no wallet needed"
+            title="Respond"
+            description="Open the link, complete the campaign, and submit — blockchain records your response permanently"
+            badge="participant"
             icon={
               <svg
                 className="w-6 h-6 text-cyan-500"
@@ -96,9 +182,9 @@ export function HowItWorksSection() {
             }
           />
           <StepCard
-            number="4"
-            title="Record"
-            description="Results finalized on-chain — permanent and verifiable"
+            title="Verify"
+            description="Anyone with the link can view results and verify they match the blockchain records"
+            badge="anyone"
             icon={
               <svg
                 className="w-6 h-6 text-cyan-500"
@@ -116,6 +202,10 @@ export function HowItWorksSection() {
             }
           />
         </div>
+
+        <p className="text-center text-lg text-gray-600 dark:text-gray-400">
+          Simple as Google Forms, but with blockchain guarantees.
+        </p>
       </div>
     </section>
   );

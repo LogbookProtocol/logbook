@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { useWallets, useConnectWallet } from '@mysten/dapp-kit';
 import { getZkLoginUrl } from '@/lib/zklogin-utils';
 
@@ -11,6 +12,7 @@ interface ConnectOptionsModalProps {
 }
 
 export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalProps) {
+  const router = useRouter();
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showMoreWallets, setShowMoreWallets] = useState(false);
@@ -45,10 +47,21 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
     }
   }, [open, onOpenChange]);
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
-    const authUrl = getZkLoginUrl('google');
-    window.location.href = authUrl;
+    try {
+      // Save current page to return after login (only if not already set by requireAuth)
+      if (!sessionStorage.getItem('zklogin_return_url')) {
+        sessionStorage.setItem('zklogin_return_url', window.location.pathname + window.location.search);
+      }
+      // Save scroll position to restore after login
+      sessionStorage.setItem('zklogin_scroll_position', String(window.scrollY));
+      const authUrl = await getZkLoginUrl('google');
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('Failed to initialize zkLogin:', error);
+      setIsLoadingGoogle(false);
+    }
   };
 
   const handleWalletConnect = (walletName: string) => {
@@ -61,6 +74,13 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
           onSuccess: () => {
             console.log('Successfully connected to:', walletName);
             onOpenChange(false);
+
+            // Redirect to return URL if set (from requireAuth flow)
+            const returnUrl = sessionStorage.getItem('zklogin_return_url');
+            if (returnUrl) {
+              sessionStorage.removeItem('zklogin_return_url');
+              router.push(returnUrl);
+            }
           },
         }
       );

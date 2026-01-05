@@ -1,61 +1,31 @@
-// Campaign types
-export const CAMPAIGN_TYPES = {
-  voting: { label: 'Voting', icon: '🗳️', color: 'cyan' },
-  feedback: { label: 'Feedback', icon: '📊', color: 'blue' },
-  registration: { label: 'Registration', icon: '📝', color: 'green' },
-  certification: { label: 'Certification', icon: '🎓', color: 'purple' },
-  fundraising: { label: 'Fundraising', icon: '💰', color: 'yellow' },
-  lottery: { label: 'Lottery', icon: '🎲', color: 'pink' },
-} as const;
-
-export type CampaignType = keyof typeof CAMPAIGN_TYPES;
-
-// Campaign statuses
+// Campaign statuses (campaigns start immediately, no "upcoming")
 export const CAMPAIGN_STATUSES = {
-  draft: { label: 'Draft', color: 'gray' },
-  upcoming: { label: 'Upcoming', color: 'orange' },
   active: { label: 'Active', color: 'green' },
   ended: { label: 'Ended', color: 'gray' },
 } as const;
 
 export type CampaignStatus = keyof typeof CAMPAIGN_STATUSES;
 
-// Space reference
-export interface SpaceRef {
-  id: string;
-  name: string;
-  icon: string;
-}
-
 // Portfolio campaign (created by user)
 export interface PortfolioCampaign {
   id: string;
   title: string;
   description: string;
-  type: CampaignType;
   status: CampaignStatus;
-  visibility: 'public' | 'private';
-  space: SpaceRef | null;
-  startDate: string | null;
-  endDate: string | null;
+  endDate: string;
   responsesCount: number;
-  participantsTarget: number | null;
   createdAt: string;
 }
 
-// Activity campaign (user participates)
+// Activity campaign (campaigns user has responded to)
 export interface ActivityCampaign {
   id: string;
   title: string;
   description: string;
-  type: CampaignType;
   status: CampaignStatus;
-  space: SpaceRef | null;
-  startDate?: string;
   endDate: string;
-  participation: 'pending' | 'completed';
-  respondedAt: string | null;
-  reward: string | null;
+  respondedAt: string;
+  createdAt?: string;
 }
 
 // Campaigns created by user (for Portfolio)
@@ -64,334 +34,91 @@ export const mockPortfolioCampaigns: PortfolioCampaign[] = [
     id: 'camp-1',
     title: 'Q1 2025 Product Roadmap Vote',
     description: 'Vote on which features to prioritize for Q1 2025',
-    type: 'voting',
     status: 'active',
-    visibility: 'public',
-    space: { id: 'space-1', name: 'Acme Corp', icon: '🏢' },
-    startDate: null,
     endDate: '2025-02-15',
     responsesCount: 234,
-    participantsTarget: 500,
     createdAt: '2025-01-10',
   },
   {
     id: 'camp-2',
     title: 'Team Satisfaction Survey',
     description: 'Anonymous feedback on team culture and processes',
-    type: 'feedback',
     status: 'active',
-    visibility: 'private',
-    space: { id: 'space-7', name: 'Engineering Team', icon: '👔' },
-    startDate: null,
     endDate: '2025-01-31',
     responsesCount: 8,
-    participantsTarget: 12,
     createdAt: '2025-01-05',
   },
   {
     id: 'camp-3',
     title: 'Conference Speaker Selection',
     description: 'Vote for speakers at ETH Denver 2025',
-    type: 'voting',
-    status: 'upcoming',
-    visibility: 'public',
-    space: { id: 'space-1', name: 'Ethereum Developers Portugal', icon: '👥' },
-    startDate: '2025-02-01',
+    status: 'active',
     endDate: '2025-02-10',
-    responsesCount: 0,
-    participantsTarget: 200,
+    responsesCount: 45,
     createdAt: '2025-01-12',
   },
   {
     id: 'camp-4',
-    title: 'Workshop Registration',
-    description: 'Register for Solidity Workshop Feb 2025',
-    type: 'registration',
+    title: 'Workshop Feedback Survey',
+    description: 'Share your feedback on Solidity Workshop',
     status: 'ended',
-    visibility: 'public',
-    space: null,
-    startDate: '2024-12-01',
     endDate: '2024-12-20',
     responsesCount: 45,
-    participantsTarget: 50,
     createdAt: '2024-11-25',
   },
   {
     id: 'camp-5',
     title: 'Q4 2024 Budget Allocation',
     description: 'Decide how to allocate remaining Q4 budget',
-    type: 'voting',
     status: 'ended',
-    visibility: 'private',
-    space: { id: 'space-4', name: 'Acme Corporation', icon: '🏢' },
-    startDate: '2024-10-15',
     endDate: '2024-10-25',
     responsesCount: 127,
-    participantsTarget: 150,
     createdAt: '2024-10-10',
   },
   {
     id: 'camp-6',
     title: 'Product Feature Feedback',
     description: 'Share your thoughts on the new dashboard',
-    type: 'feedback',
-    status: 'draft',
-    visibility: 'public',
-    space: null,
-    startDate: null,
-    endDate: null,
-    responsesCount: 0,
-    participantsTarget: 100,
+    status: 'active',
+    endDate: '2025-03-01',
+    responsesCount: 12,
     createdAt: '2025-01-14',
   },
 ];
 
-// Campaigns where user participates (for Activity)
+// Campaigns where user has responded
 export const mockActivityCampaigns: ActivityCampaign[] = [
   {
     id: 'act-1',
-    title: 'Community Governance Vote Q1 2025',
-    description: 'Vote on proposals for protocol improvements',
-    type: 'voting',
+    title: 'ETH Denver Community Survey',
+    description: 'Share your expectations for ETH Denver 2025',
     status: 'active',
-    space: { id: 'space-3', name: 'MakerDAO', icon: '🏛️' },
-    endDate: '2025-02-01',
-    participation: 'pending',
-    respondedAt: null,
-    reward: null,
+    endDate: '2025-02-20',
+    respondedAt: '2025-01-10',
   },
   {
     id: 'act-2',
-    title: 'Stanford Course Feedback',
-    description: 'Rate your experience in CS101',
-    type: 'feedback',
-    status: 'active',
-    space: { id: 'space-2', name: 'Stanford University', icon: '🎓' },
-    endDate: '2025-01-25',
-    participation: 'pending',
-    respondedAt: null,
-    reward: null,
+    title: 'Protocol Upgrade Vote',
+    description: 'Vote on major protocol changes',
+    status: 'ended',
+    endDate: '2024-12-15',
+    respondedAt: '2024-12-10',
   },
   {
     id: 'act-3',
-    title: 'ETH Denver Volunteer Registration',
-    description: 'Sign up to volunteer at ETH Denver 2025',
-    type: 'registration',
-    status: 'active',
-    space: { id: 'space-1', name: 'Ethereum Developers Portugal', icon: '👥' },
-    endDate: '2025-02-20',
-    participation: 'completed',
-    respondedAt: '2025-01-10',
-    reward: null,
+    title: 'Community Experience Survey',
+    description: 'Rate your experience with our community events',
+    status: 'ended',
+    endDate: '2024-11-30',
+    respondedAt: '2024-11-25',
   },
   {
     id: 'act-4',
-    title: 'Solidity Certification Test',
-    description: 'Prove your Solidity development skills',
-    type: 'certification',
-    status: 'upcoming',
-    space: { id: 'space-2', name: 'Stanford University', icon: '🎓' },
-    startDate: '2025-02-01',
-    endDate: '2025-02-15',
-    participation: 'pending',
-    respondedAt: null,
-    reward: 'Certificate NFT',
-  },
-  {
-    id: 'act-5',
-    title: 'Protocol Upgrade Vote',
-    description: 'Vote on major protocol changes',
-    type: 'voting',
-    status: 'ended',
-    space: { id: 'space-3', name: 'MakerDAO', icon: '🏛️' },
-    endDate: '2024-12-15',
-    participation: 'completed',
-    respondedAt: '2024-12-10',
-    reward: null,
-  },
-  {
-    id: 'act-6',
-    title: 'NFT Lottery Draw',
-    description: 'Win exclusive NFTs from the community collection',
-    type: 'lottery',
-    status: 'ended',
-    space: { id: 'space-1', name: 'Ethereum Developers Portugal', icon: '👥' },
-    endDate: '2024-11-30',
-    participation: 'completed',
-    respondedAt: '2024-11-25',
-    reward: 'Won: Rare NFT #234',
-  },
-  {
-    id: 'act-7',
     title: 'Q3 Product Survey',
     description: 'Your feedback on our Q3 releases',
-    type: 'feedback',
     status: 'ended',
-    space: null,
     endDate: '2024-10-01',
-    participation: 'completed',
     respondedAt: '2024-09-28',
-    reward: '5 USDC',
-  },
-];
-
-// Public campaign for registry/explore
-export interface PublicCampaign {
-  id: string;
-  title: string;
-  description: string;
-  type: CampaignType;
-  status: CampaignStatus;
-  visibility: 'public' | 'private';
-  space: SpaceRef | null;
-  creator: string;
-  startDate: string | null;
-  endDate: string | null;
-  responsesCount: number;
-  participantsTarget: number | null;
-}
-
-// All public campaigns (for Campaigns page "All" tab)
-export const mockCampaigns: PublicCampaign[] = [
-  {
-    id: 'pub-1',
-    title: 'Community Governance Vote Q1 2025',
-    description: 'Vote on proposals for protocol improvements and treasury allocation',
-    type: 'voting',
-    status: 'active',
-    visibility: 'public',
-    space: { id: 'space-3', name: 'MakerDAO', icon: '🏛️' },
-    creator: '0x456...def',
-    startDate: null,
-    endDate: '2025-02-01',
-    responsesCount: 1234,
-    participantsTarget: 5000,
-  },
-  {
-    id: 'pub-2',
-    title: 'ETH Denver 2025 Speaker Selection',
-    description: 'Vote for your favorite speakers at ETH Denver 2025',
-    type: 'voting',
-    status: 'active',
-    visibility: 'public',
-    space: { id: 'space-1', name: 'Ethereum Developers Portugal', icon: '👥' },
-    creator: '0x789...ghi',
-    startDate: null,
-    endDate: '2025-02-10',
-    responsesCount: 567,
-    participantsTarget: 2000,
-  },
-  {
-    id: 'pub-3',
-    title: 'DeFi Protocol Feedback Survey',
-    description: 'Share your experience using our DeFi protocol',
-    type: 'feedback',
-    status: 'active',
-    visibility: 'public',
-    space: { id: 'space-4', name: 'Uniswap', icon: '🦄' },
-    creator: '0xabc...123',
-    startDate: null,
-    endDate: '2025-01-31',
-    responsesCount: 89,
-    participantsTarget: 500,
-  },
-  {
-    id: 'pub-4',
-    title: 'Solidity Workshop Registration',
-    description: 'Register for advanced Solidity development workshop',
-    type: 'registration',
-    status: 'upcoming',
-    visibility: 'public',
-    space: { id: 'space-2', name: 'Stanford University', icon: '🎓' },
-    creator: '0xdef...456',
-    startDate: '2025-02-05',
-    endDate: '2025-02-20',
-    responsesCount: 0,
-    participantsTarget: 100,
-  },
-  {
-    id: 'pub-5',
-    title: 'NFT Community Lottery',
-    description: 'Enter to win exclusive NFTs from top artists',
-    type: 'lottery',
-    status: 'active',
-    visibility: 'public',
-    space: null,
-    creator: '0x111...222',
-    startDate: null,
-    endDate: '2025-01-28',
-    responsesCount: 3456,
-    participantsTarget: null,
-  },
-  {
-    id: 'pub-6',
-    title: 'Web3 Developer Certification',
-    description: 'Prove your Web3 development skills and earn a certificate',
-    type: 'certification',
-    status: 'active',
-    visibility: 'public',
-    space: { id: 'space-2', name: 'Stanford University', icon: '🎓' },
-    creator: '0x333...444',
-    startDate: null,
-    endDate: '2025-03-01',
-    responsesCount: 234,
-    participantsTarget: 1000,
-  },
-  {
-    id: 'pub-7',
-    title: 'DAO Treasury Allocation Q1',
-    description: 'Decide how to allocate DAO treasury funds for Q1 2025',
-    type: 'voting',
-    status: 'upcoming',
-    visibility: 'public',
-    space: { id: 'space-3', name: 'MakerDAO', icon: '🏛️' },
-    creator: '0x555...666',
-    startDate: '2025-02-01',
-    endDate: '2025-02-15',
-    responsesCount: 0,
-    participantsTarget: 3000,
-  },
-  {
-    id: 'pub-8',
-    title: 'Community Event Feedback',
-    description: 'Rate your experience at our recent community event',
-    type: 'feedback',
-    status: 'ended',
-    visibility: 'public',
-    space: { id: 'space-1', name: 'Ethereum Developers Portugal', icon: '👥' },
-    creator: '0x777...888',
-    startDate: '2024-12-01',
-    endDate: '2024-12-20',
-    responsesCount: 156,
-    participantsTarget: 200,
-  },
-  {
-    id: 'pub-9',
-    title: 'Protocol Upgrade Vote v2.0',
-    description: 'Vote on the proposed protocol upgrade to version 2.0',
-    type: 'voting',
-    status: 'ended',
-    visibility: 'public',
-    space: { id: 'space-4', name: 'Uniswap', icon: '🦄' },
-    creator: '0x999...000',
-    startDate: '2024-11-15',
-    endDate: '2024-11-30',
-    responsesCount: 4521,
-    participantsTarget: 5000,
-  },
-  {
-    id: 'pub-10',
-    title: 'Hackathon Registration 2025',
-    description: 'Register for the annual Web3 hackathon',
-    type: 'registration',
-    status: 'active',
-    visibility: 'public',
-    space: null,
-    creator: '0xaaa...bbb',
-    startDate: null,
-    endDate: '2025-02-28',
-    responsesCount: 789,
-    participantsTarget: 1000,
   },
 ];
 
@@ -400,33 +127,19 @@ export interface CampaignDetails {
   id: string;
   title: string;
   description: string;
-  type: CampaignType;
   status: CampaignStatus;
-  visibility: 'public' | 'private';
   creator: {
     address: string;
     name: string | null;
     avatar: string | null;
   };
-  space: SpaceRef & { type: string } | null;
   dates: {
     created: string;
-    startDate: string | null;
-    endDate: string | null;
+    endDate: string;
   };
   stats: {
     responses: number;
-    target: number | null;
-    uniqueParticipants: number;
-    viewCount: number;
   };
-  requirements: {
-    authentication: 'wallet' | 'zklogin' | 'any';
-    payment: { amount: number; token: string } | null;
-    whitelist: string[] | null;
-    nftGate: { collection: string } | null;
-  };
-  rewards: { type: 'nft' | 'token'; amount: number; token?: string } | null;
   questions: CampaignQuestion[];
   onChain: {
     objectId: string;
@@ -446,16 +159,15 @@ export interface CampaignQuestion {
   maxLength?: number;
 }
 
-export const mockCampaignDetails: CampaignDetails = {
+// Active campaign
+export const mockActiveCampaign: CampaignDetails = {
   id: 'camp-1',
   title: 'Community Governance Vote Q1 2025',
   description: `Vote on key proposals for the protocol's future direction. This vote will determine our priorities for Q1 2025 including new feature development, treasury allocation, and partnership decisions.
 
 Your vote matters! All token holders are eligible to participate.`,
 
-  type: 'voting',
   status: 'active',
-  visibility: 'public',
 
   creator: {
     address: '0x456...def',
@@ -463,34 +175,14 @@ Your vote matters! All token holders are eligible to participate.`,
     avatar: null,
   },
 
-  space: {
-    id: 'space-3',
-    name: 'MakerDAO',
-    icon: '🏛️',
-    type: 'dao',
-  },
-
   dates: {
     created: '2025-01-01T00:00:00Z',
-    startDate: null,
     endDate: '2025-02-15T23:59:59Z',
   },
 
   stats: {
     responses: 234,
-    target: 500,
-    uniqueParticipants: 234,
-    viewCount: 1456,
   },
-
-  requirements: {
-    authentication: 'any',
-    payment: null,
-    whitelist: null,
-    nftGate: null,
-  },
-
-  rewards: null,
 
   questions: [
     {
@@ -546,6 +238,429 @@ Your vote matters! All token holders are eligible to participate.`,
   },
 };
 
+// Ended campaign
+export const mockEndedCampaign: CampaignDetails = {
+  id: 'camp-4',
+  title: 'Q4 2024 Budget Allocation Vote',
+  description: `Community vote on how to allocate the remaining Q4 2024 budget across development, marketing, and community initiatives.
+
+This vote has concluded. Thank you to everyone who participated!`,
+
+  status: 'ended',
+
+  creator: {
+    address: '0x456...def',
+    name: 'MakerDAO',
+    avatar: null,
+  },
+
+  dates: {
+    created: '2024-10-01T00:00:00Z',
+    endDate: '2024-10-25T23:59:59Z',
+  },
+
+  stats: {
+    responses: 127,
+  },
+
+  questions: [
+    {
+      id: 'q1',
+      type: 'single-choice',
+      question: 'How should we allocate the remaining budget?',
+      description: 'Choose the primary focus for Q4 spending.',
+      required: true,
+      options: [
+        { id: 'opt1', label: '60% Development, 30% Marketing, 10% Community' },
+        { id: 'opt2', label: '40% Development, 40% Marketing, 20% Community' },
+        { id: 'opt3', label: '50% Development, 25% Marketing, 25% Community' },
+      ],
+    },
+    {
+      id: 'q2',
+      type: 'multiple-choice',
+      question: 'Which initiatives should receive priority funding?',
+      required: true,
+      options: [
+        { id: 'opt1', label: 'Security audits' },
+        { id: 'opt2', label: 'Developer grants' },
+        { id: 'opt3', label: 'Community events' },
+        { id: 'opt4', label: 'Marketing campaigns' },
+      ],
+    },
+  ],
+
+  onChain: {
+    objectId: '0x9876543210fedcba...',
+    txHash: '0xfedcba0987654321...',
+    network: 'sui:mainnet',
+  },
+};
+
+// All campaign details mapped by ID
+export const mockCampaignDetailsMap: Record<string, CampaignDetails> = {
+  'camp-1': {
+    id: 'camp-1',
+    title: 'Q1 2025 Product Roadmap Vote',
+    description: `Vote on which features to prioritize for Q1 2025. Your input will directly shape our development priorities for the upcoming quarter.
+
+Help us decide where to focus our engineering resources!`,
+    status: 'active',
+    creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
+    dates: { created: '2025-01-10T00:00:00Z', endDate: '2025-02-15T23:59:59Z' },
+    stats: { responses: 234 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'single-choice',
+        question: 'Should we allocate 500,000 DAI to the Growth Fund?',
+        description: 'This would fund marketing and business development for 6 months.',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Yes, approve the allocation' },
+          { id: 'opt2', label: 'No, keep funds in treasury' },
+          { id: 'opt3', label: 'Abstain' },
+        ],
+      },
+      {
+        id: 'q2',
+        type: 'single-choice',
+        question: 'Which feature should we prioritize for Q1?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Cross-chain bridging' },
+          { id: 'opt2', label: 'Mobile app' },
+          { id: 'opt3', label: 'Advanced analytics dashboard' },
+          { id: 'opt4', label: 'API improvements' },
+        ],
+      },
+      {
+        id: 'q3',
+        type: 'multiple-choice',
+        question: 'Which partnerships should we pursue? (Select all that apply)',
+        required: false,
+        options: [
+          { id: 'opt1', label: 'Major CEX listing' },
+          { id: 'opt2', label: 'DeFi protocol integration' },
+          { id: 'opt3', label: 'Enterprise partnerships' },
+          { id: 'opt4', label: 'Academic collaborations' },
+        ],
+      },
+      {
+        id: 'q4',
+        type: 'text',
+        question: 'Any additional feedback or suggestions?',
+        required: false,
+        placeholder: 'Share your thoughts...',
+        maxLength: 500,
+      },
+    ],
+    onChain: { objectId: '0x1234567890abcdef...', txHash: '0xabcdef1234567890...', network: 'sui:mainnet' },
+  },
+  'camp-2': {
+    id: 'camp-2',
+    title: 'Team Satisfaction Survey',
+    description: `Anonymous feedback on team culture and processes. Help us understand what's working well and what needs improvement.
+
+Your responses are completely anonymous.`,
+    status: 'active',
+    creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
+    dates: { created: '2025-01-05T00:00:00Z', endDate: '2025-01-31T23:59:59Z' },
+    stats: { responses: 8 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'single-choice',
+        question: 'How satisfied are you with team communication?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Very satisfied' },
+          { id: 'opt2', label: 'Satisfied' },
+          { id: 'opt3', label: 'Neutral' },
+          { id: 'opt4', label: 'Dissatisfied' },
+        ],
+      },
+      {
+        id: 'q2',
+        type: 'text',
+        question: 'What could we improve?',
+        required: false,
+        placeholder: 'Share your suggestions...',
+        maxLength: 1000,
+      },
+    ],
+    onChain: { objectId: '0x2345678901bcdef0...', txHash: '0xbcdef01234567891...', network: 'sui:mainnet' },
+  },
+  'camp-3': {
+    id: 'camp-3',
+    title: 'Conference Speaker Selection',
+    description: `Vote for speakers at ETH Denver 2025. We have limited slots and want the community to decide who should represent us.
+
+Each vote counts equally.`,
+    status: 'active',
+    creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
+    dates: { created: '2025-01-12T00:00:00Z', endDate: '2025-02-10T23:59:59Z' },
+    stats: { responses: 45 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'multiple-choice',
+        question: 'Which speakers would you like to see at ETH Denver?',
+        description: 'Select up to 3 speakers',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Vitalik Buterin - Ethereum Future' },
+          { id: 'opt2', label: 'Stani Kulechov - DeFi Innovation' },
+          { id: 'opt3', label: 'Hayden Adams - AMM Deep Dive' },
+          { id: 'opt4', label: 'Community Speaker TBD' },
+        ],
+      },
+    ],
+    onChain: { objectId: '0x3456789012cdef01...', txHash: '0xcdef012345678912...', network: 'sui:mainnet' },
+  },
+  'camp-4': {
+    id: 'camp-4',
+    title: 'Workshop Feedback Survey',
+    description: `Share your feedback on Solidity Workshop. Help us improve future educational content.
+
+This survey has concluded. Thank you to all participants!`,
+    status: 'ended',
+    creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
+    dates: { created: '2024-11-25T00:00:00Z', endDate: '2024-12-20T23:59:59Z' },
+    stats: { responses: 45 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'single-choice',
+        question: 'How would you rate the workshop overall?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Excellent' },
+          { id: 'opt2', label: 'Good' },
+          { id: 'opt3', label: 'Average' },
+          { id: 'opt4', label: 'Poor' },
+        ],
+      },
+      {
+        id: 'q2',
+        type: 'text',
+        question: 'What topics would you like in future workshops?',
+        required: false,
+        placeholder: 'Share your ideas...',
+        maxLength: 500,
+      },
+    ],
+    onChain: { objectId: '0x4567890123def012...', txHash: '0xdef0123456789123...', network: 'sui:mainnet' },
+  },
+  'camp-5': {
+    id: 'camp-5',
+    title: 'Q4 2024 Budget Allocation',
+    description: `Decide how to allocate remaining Q4 budget across development, marketing, and community initiatives.
+
+This vote has concluded. Thank you to everyone who participated!`,
+    status: 'ended',
+    creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
+    dates: { created: '2024-10-10T00:00:00Z', endDate: '2024-10-25T23:59:59Z' },
+    stats: { responses: 127 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'single-choice',
+        question: 'How should we allocate the remaining budget?',
+        description: 'Choose the primary focus for Q4 spending.',
+        required: true,
+        options: [
+          { id: 'opt1', label: '60% Development, 30% Marketing, 10% Community' },
+          { id: 'opt2', label: '40% Development, 40% Marketing, 20% Community' },
+          { id: 'opt3', label: '50% Development, 25% Marketing, 25% Community' },
+        ],
+      },
+      {
+        id: 'q2',
+        type: 'multiple-choice',
+        question: 'Which initiatives should receive priority funding?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Security audits' },
+          { id: 'opt2', label: 'Developer grants' },
+          { id: 'opt3', label: 'Community events' },
+          { id: 'opt4', label: 'Marketing campaigns' },
+        ],
+      },
+    ],
+    onChain: { objectId: '0x9876543210fedcba...', txHash: '0xfedcba0987654321...', network: 'sui:mainnet' },
+  },
+  'camp-6': {
+    id: 'camp-6',
+    title: 'Product Feature Feedback',
+    description: `Share your thoughts on the new dashboard. We want to know what you think about the recent updates.
+
+Share your thoughts on the new dashboard.`,
+    status: 'active',
+    creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
+    dates: { created: '2025-01-14T00:00:00Z', endDate: '2025-03-01T23:59:59Z' },
+    stats: { responses: 12 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'single-choice',
+        question: 'How do you like the new dashboard design?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Love it!' },
+          { id: 'opt2', label: 'It\'s okay' },
+          { id: 'opt3', label: 'Prefer the old design' },
+        ],
+      },
+      {
+        id: 'q2',
+        type: 'text',
+        question: 'Any specific feedback on the UI/UX?',
+        required: false,
+        placeholder: 'Tell us what you think...',
+        maxLength: 500,
+      },
+    ],
+    onChain: { objectId: '0x5678901234ef0123...', txHash: '0xef01234567890134...', network: 'sui:mainnet' },
+  },
+  // Activity campaigns (campaigns user participated in)
+  'act-1': {
+    id: 'act-1',
+    title: 'ETH Denver Community Survey',
+    description: `Share your expectations for ETH Denver 2025. Help us plan the best experience for the community.
+
+Your feedback will directly influence event planning!`,
+    status: 'active',
+    creator: { address: '0x789abcdef1234567890abcdef1234567890abc', name: 'ETH Denver DAO', avatar: null },
+    dates: { created: '2025-01-05T00:00:00Z', endDate: '2025-02-20T23:59:59Z' },
+    stats: { responses: 312 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'multiple-choice',
+        question: 'Which topics are you most interested in?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'DeFi & Trading' },
+          { id: 'opt2', label: 'NFTs & Gaming' },
+          { id: 'opt3', label: 'Infrastructure & Scaling' },
+          { id: 'opt4', label: 'DAOs & Governance' },
+        ],
+      },
+      {
+        id: 'q2',
+        type: 'text',
+        question: 'What speakers would you like to see?',
+        required: false,
+        placeholder: 'Share your suggestions...',
+        maxLength: 500,
+      },
+    ],
+    onChain: { objectId: '0x6789012345f01234...', txHash: '0xf012345678901235...', network: 'sui:mainnet' },
+  },
+  'act-2': {
+    id: 'act-2',
+    title: 'Protocol Upgrade Vote',
+    description: `Vote on major protocol changes. This upgrade includes performance improvements and new features.
+
+This vote has concluded.`,
+    status: 'ended',
+    creator: { address: '0xabcdef1234567890abcdef1234567890789', name: 'Protocol Foundation', avatar: null },
+    dates: { created: '2024-12-01T00:00:00Z', endDate: '2024-12-15T23:59:59Z' },
+    stats: { responses: 567 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'single-choice',
+        question: 'Do you approve the protocol upgrade?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Yes, approve' },
+          { id: 'opt2', label: 'No, reject' },
+          { id: 'opt3', label: 'Abstain' },
+        ],
+      },
+    ],
+    onChain: { objectId: '0x7890123456012345...', txHash: '0x0123456789012346...', network: 'sui:mainnet' },
+  },
+  'act-3': {
+    id: 'act-3',
+    title: 'Community Experience Survey',
+    description: `Rate your experience with our community events. Your feedback helps us improve future events.
+
+This survey has concluded.`,
+    status: 'ended',
+    creator: { address: '0xdef1234567890abcdef1234567890012', name: 'Community Team', avatar: null },
+    dates: { created: '2024-11-15T00:00:00Z', endDate: '2024-11-30T23:59:59Z' },
+    stats: { responses: 89 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'single-choice',
+        question: 'How would you rate our community events?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Excellent' },
+          { id: 'opt2', label: 'Good' },
+          { id: 'opt3', label: 'Average' },
+          { id: 'opt4', label: 'Poor' },
+        ],
+      },
+    ],
+    onChain: { objectId: '0x8901234567123456...', txHash: '0x1234567890123457...', network: 'sui:mainnet' },
+  },
+  'act-4': {
+    id: 'act-4',
+    title: 'Q3 Product Survey',
+    description: `Your feedback on our Q3 releases. Tell us what you think about the new features.
+
+This survey has concluded.`,
+    status: 'ended',
+    creator: { address: '0x3456789abcdef1234567890abcdef1234567890678', name: 'Product Team', avatar: null },
+    dates: { created: '2024-09-15T00:00:00Z', endDate: '2024-10-01T23:59:59Z' },
+    stats: { responses: 156 },
+    questions: [
+      {
+        id: 'q1',
+        type: 'single-choice',
+        question: 'How satisfied are you with Q3 releases?',
+        required: true,
+        options: [
+          { id: 'opt1', label: 'Very satisfied' },
+          { id: 'opt2', label: 'Satisfied' },
+          { id: 'opt3', label: 'Neutral' },
+          { id: 'opt4', label: 'Dissatisfied' },
+        ],
+      },
+      {
+        id: 'q2',
+        type: 'text',
+        question: 'Any feedback on the new features?',
+        required: false,
+        placeholder: 'Share your thoughts...',
+        maxLength: 500,
+      },
+    ],
+    onChain: { objectId: '0x9012345678234567...', txHash: '0x2345678901234568...', network: 'sui:mainnet' },
+  },
+};
+
+// Helper function to get campaign by ID
+export function getCampaignById(id: string): CampaignDetails | null {
+  return mockCampaignDetailsMap[id] || null;
+}
+
+// Default export for backwards compatibility
+export const mockCampaignDetails = mockActiveCampaign;
+
+// Text response with respondent info
+export interface TextResponseWithRespondent {
+  text: string;
+  respondent: string;
+  respondentAddress: string;
+  txDigest?: string;
+}
+
 // Campaign results
 export interface QuestionResult {
   id: string;
@@ -560,6 +675,7 @@ export interface QuestionResult {
     percentage: number;
   }[];
   winner?: string;
+  textResponses?: TextResponseWithRespondent[];
 }
 
 export interface CampaignResults {
@@ -641,6 +757,7 @@ export const mockCampaignResults: CampaignResults = {
 export interface CampaignResponse {
   id: string;
   respondent: string;
+  respondentAddress?: string; // Full address for Suiscan link
   timestamp: string;
   answers: Record<string, string | string[] | null>;
   txHash: string;
@@ -650,6 +767,7 @@ export const mockCampaignResponses: CampaignResponse[] = [
   {
     id: 'resp-1',
     respondent: '0x123...abc',
+    respondentAddress: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc',
     timestamp: '2025-01-07T14:32:00Z',
     answers: { q1: 'opt1', q2: 'opt2', q3: ['opt1', 'opt2'], q4: 'Great initiative!' },
     txHash: '0xresp123...',
@@ -657,6 +775,7 @@ export const mockCampaignResponses: CampaignResponse[] = [
   {
     id: 'resp-2',
     respondent: '0x456...def',
+    respondentAddress: '0x456789abcdef0123456789abcdef0123456789abcdef0123456789def',
     timestamp: '2025-01-07T13:15:00Z',
     answers: { q1: 'opt2', q2: 'opt1', q3: ['opt1'], q4: null },
     txHash: '0xresp456...',
@@ -664,6 +783,7 @@ export const mockCampaignResponses: CampaignResponse[] = [
   {
     id: 'resp-3',
     respondent: '0x789...ghi',
+    respondentAddress: '0x789abcdef0123456789abcdef0123456789abcdef0123456789ghi',
     timestamp: '2025-01-07T12:45:00Z',
     answers: { q1: 'opt1', q2: 'opt1', q3: ['opt1', 'opt3', 'opt4'], q4: 'Focus on security' },
     txHash: '0xresp789...',
@@ -671,6 +791,7 @@ export const mockCampaignResponses: CampaignResponse[] = [
   {
     id: 'resp-4',
     respondent: '0xabc...123',
+    respondentAddress: '0xabcdef0123456789abcdef0123456789abcdef0123456789abc123',
     timestamp: '2025-01-07T11:20:00Z',
     answers: { q1: 'opt1', q2: 'opt3', q3: ['opt2', 'opt3'], q4: null },
     txHash: '0xresp101...',
@@ -678,6 +799,7 @@ export const mockCampaignResponses: CampaignResponse[] = [
   {
     id: 'resp-5',
     respondent: '0xdef...456',
+    respondentAddress: '0xdef0123456789abcdef0123456789abcdef0123456789abcdef456',
     timestamp: '2025-01-07T10:05:00Z',
     answers: { q1: 'opt3', q2: 'opt2', q3: ['opt1', 'opt2', 'opt3', 'opt4'], q4: 'All partnerships are valuable' },
     txHash: '0xresp102...',

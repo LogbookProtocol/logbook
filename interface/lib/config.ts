@@ -1,8 +1,8 @@
-export const NETWORK = 'testnet';
+export const NETWORK = 'devnet';
 
-export const PACKAGE_ID = '0x6c7f7c9353b835325c3057d50ebd5920d257c70794873f09edf6b1f374ae208e';
+export const PACKAGE_ID = '0x71f222396cc039caa67acec882be72a1c87b328c8ce140f359dbb6548caa1fe2';
 
-export const RPC_URL = 'https://fullnode.testnet.sui.io:443';
+export const RPC_URL = 'https://fullnode.devnet.sui.io:443';
 
 // Константы из контракта
 export const FORM_TYPES = {

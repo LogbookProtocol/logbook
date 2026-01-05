@@ -11,41 +11,16 @@ export interface UserAccount {
     campaignsCreated: number;
     campaignsParticipated: number;
     totalResponses: number;
-    spacesJoined: number;
     memberSince: string;
   };
 }
 
-export interface WalletToken {
-  symbol: string;
-  name: string;
-  balance: number;
-  usdValue: number;
-  icon: string;
-}
-
-export interface WalletAssets {
-  sui: WalletToken;
-  tokens: WalletToken[];
-  totalUsdValue: number;
-}
-
-export interface LogbookDeposit {
-  balance: number;
-  usdValue: number;
-  sponsoredTransactions: number;
-  lastDeposit: string | null;
-  lastWithdraw: string | null;
-}
-
 export interface Transaction {
   id: string;
-  type: 'deposit' | 'withdraw' | 'send' | 'receive' | 'sponsor';
+  type: 'create_campaign' | 'respond' | 'sponsored_gas';
   amount: number;
   symbol: string;
-  description?: string;
-  from?: string;
-  to?: string;
+  description: string;
   timestamp: string;
   status: 'completed' | 'pending' | 'failed';
   txHash: string;
@@ -53,17 +28,6 @@ export interface Transaction {
 
 export interface UserSettings {
   theme: 'dark' | 'light' | 'system';
-  notifications: {
-    email: boolean;
-    campaignStart: boolean;
-    campaignEnd: boolean;
-    newResponse: boolean;
-    weeklyDigest: boolean;
-  };
-  privacy: {
-    showProfile: boolean;
-    showStats: boolean;
-  };
 }
 
 export const mockUserAccount: UserAccount = {
@@ -77,59 +41,24 @@ export const mockUserAccount: UserAccount = {
     campaignsCreated: 12,
     campaignsParticipated: 47,
     totalResponses: 156,
-    spacesJoined: 8,
     memberSince: '2024-06-15',
   },
-};
-
-export const mockWalletAssets: WalletAssets = {
-  sui: {
-    symbol: 'SUI',
-    name: 'Sui',
-    balance: 245.67,
-    usdValue: 892.45,
-    icon: 'SUI',
-  },
-  tokens: [
-    {
-      symbol: 'USDC',
-      name: 'USD Coin',
-      balance: 1250.00,
-      usdValue: 1250.00,
-      icon: 'USDC',
-    },
-    {
-      symbol: 'USDT',
-      name: 'Tether',
-      balance: 500.00,
-      usdValue: 500.00,
-      icon: 'USDT',
-    },
-  ],
-  totalUsdValue: 2642.45,
-};
-
-export const mockLogbookDeposit: LogbookDeposit = {
-  balance: 50.00,
-  usdValue: 181.50,
-  sponsoredTransactions: 234,
-  lastDeposit: '2025-01-10',
-  lastWithdraw: null,
 };
 
 export const mockTransactionHistory: Transaction[] = [
   {
     id: 'tx-1',
-    type: 'deposit',
-    amount: 25.00,
+    type: 'create_campaign',
+    amount: 0.12,
     symbol: 'SUI',
+    description: 'Created "Q1 2025 Product Roadmap Vote"',
     timestamp: '2025-01-10T14:30:00Z',
     status: 'completed',
     txHash: '0xabc123...def456',
   },
   {
     id: 'tx-2',
-    type: 'sponsor',
+    type: 'sponsored_gas',
     amount: 0.05,
     symbol: 'SUI',
     description: 'Sponsored response in "Q1 Governance Vote"',
@@ -139,46 +68,53 @@ export const mockTransactionHistory: Transaction[] = [
   },
   {
     id: 'tx-3',
-    type: 'deposit',
-    amount: 25.00,
+    type: 'respond',
+    amount: 0.02,
     symbol: 'SUI',
-    timestamp: '2025-01-05T09:00:00Z',
+    description: 'Responded to "ETH Denver Community Survey"',
+    timestamp: '2025-01-08T16:45:00Z',
     status: 'completed',
     txHash: '0xghi789...jkl012',
   },
   {
     id: 'tx-4',
-    type: 'receive',
-    amount: 100.00,
-    symbol: 'USDC',
-    from: '0x123...456',
-    timestamp: '2025-01-03T16:45:00Z',
+    type: 'create_campaign',
+    amount: 0.15,
+    symbol: 'SUI',
+    description: 'Created "Team Satisfaction Survey"',
+    timestamp: '2025-01-05T09:00:00Z',
     status: 'completed',
     txHash: '0xjkl012...mno345',
   },
   {
     id: 'tx-5',
-    type: 'send',
-    amount: 50.00,
+    type: 'sponsored_gas',
+    amount: 0.03,
     symbol: 'SUI',
-    to: '0x789...abc',
-    timestamp: '2024-12-28T11:20:00Z',
+    description: 'Sponsored response in "Team Satisfaction Survey"',
+    timestamp: '2025-01-04T11:20:00Z',
     status: 'completed',
     txHash: '0xmno345...pqr678',
   },
+  {
+    id: 'tx-6',
+    type: 'respond',
+    amount: 0.02,
+    symbol: 'SUI',
+    description: 'Responded to "Protocol Upgrade Vote"',
+    timestamp: '2024-12-10T08:30:00Z',
+    status: 'completed',
+    txHash: '0xpqr678...stu901',
+  },
 ];
+
+// Calculate total spent
+export const getTotalSpentSui = () => {
+  return mockTransactionHistory
+    .filter(tx => tx.status === 'completed')
+    .reduce((sum, tx) => sum + tx.amount, 0);
+};
 
 export const mockUserSettings: UserSettings = {
   theme: 'dark',
-  notifications: {
-    email: true,
-    campaignStart: true,
-    campaignEnd: true,
-    newResponse: false,
-    weeklyDigest: true,
-  },
-  privacy: {
-    showProfile: true,
-    showStats: true,
-  },
 };

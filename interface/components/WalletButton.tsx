@@ -102,9 +102,9 @@ export function WalletButton() {
     // Отправляем событие для обновления UI
     window.dispatchEvent(new Event('zklogin-changed'));
 
-    // Если пользователь на странице создания кампании, редиректим на главную
-    if (pathname === '/campaigns/new') {
-      router.push('/');
+    // Если пользователь на странице кампаний (создание, просмотр, участие), редиректим в список
+    if (pathname.startsWith('/campaigns/')) {
+      router.push('/campaigns');
     }
   };
 
@@ -161,30 +161,6 @@ export function WalletButton() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
                 <span>Account</span>
-              </button>
-              <button
-                onClick={() => {
-                  router.push('/account?tab=assets');
-                  setIsMenuOpen(false);
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Assets</span>
-              </button>
-              <button
-                onClick={() => {
-                  router.push('/account?tab=deposit');
-                  setIsMenuOpen(false);
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                </svg>
-                <span>Logbook Deposit</span>
               </button>
               <button
                 onClick={() => handleCopyAddress(zkLoginData.address)}
@@ -272,30 +248,6 @@ export function WalletButton() {
                 <span>Account</span>
               </button>
               <button
-                onClick={() => {
-                  router.push('/account?tab=assets');
-                  setIsMenuOpen(false);
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Assets</span>
-              </button>
-              <button
-                onClick={() => {
-                  router.push('/account?tab=deposit');
-                  setIsMenuOpen(false);
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                </svg>
-                <span>Logbook Deposit</span>
-              </button>
-              <button
                 onClick={() => handleCopyAddress(account.address)}
                 className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center gap-2 border-t border-gray-200 dark:border-gray-700"
               >
@@ -325,9 +277,9 @@ export function WalletButton() {
                   disconnect();
                   setIsMenuOpen(false);
 
-                  // Если пользователь на странице создания кампании, редиректим на главную
-                  if (pathname === '/campaigns/new') {
-                    router.push('/');
+                  // Если пользователь на странице кампаний (создание, просмотр, участие), редиректим в список
+                  if (pathname.startsWith('/campaigns/')) {
+                    router.push('/campaigns');
                   }
                 }}
                 className="w-full px-4 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition border-t border-gray-200 dark:border-gray-700 flex items-center gap-2"

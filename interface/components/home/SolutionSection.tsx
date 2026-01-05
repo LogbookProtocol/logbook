@@ -1,75 +1,57 @@
 'use client';
 
-import { TransformAnimation } from '@/components/TransformAnimation';
+interface FeatureCardProps {
+  title: string;
+  description: string;
+}
+
+function FeatureCard({ title, description }: FeatureCardProps) {
+  return (
+    <div className="p-6 rounded-2xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-center">
+      <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+        <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <h3 className="text-gray-900 dark:text-white font-semibold text-lg mb-3">{title}</h3>
+      <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{description}</p>
+    </div>
+  );
+}
 
 export function SolutionSection() {
   return (
-    <section className="py-24 px-6 bg-gray-100/50 dark:bg-white/[0.02]">
-      <div className="max-w-6xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
-          <div className="relative aspect-square max-w-[400px] bg-white dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden flex items-center justify-center p-8">
-            <TransformAnimation />
-          </div>
-
-          <div className="max-w-[400px]">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-6">
-              From chaos to{' '}
-              <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                permanent record
-              </span>
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-8 text-lg">
-              Logbook transforms collective actions into immutable blockchain records. Every
-              response is a fact. Every result is verifiable. Forever.
-            </p>
-
-            <ul className="space-y-4">
-              <li className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-500">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
-                <span className="text-gray-700 dark:text-gray-300">On-chain transparency</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-500">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
-                <span className="text-gray-700 dark:text-gray-300">
-                  Gasless participation with zkLogin
-                </span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-500">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
-                <span className="text-gray-700 dark:text-gray-300">
-                  Verifiable results anyone can audit
-                </span>
-              </li>
-            </ul>
-          </div>
+    <section className="py-20 px-6">
+      <div className="max-w-5xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-6">
+            Don't trust. Verify.
+          </h2>
+          <p className="text-base md:text-lg text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+            Truth isn't what someone tells you — it's what you can verify yourself.
+            <br />
+            Every vote recorded on Sui blockchain. Every result mathematically provable.
+          </p>
         </div>
+
+        <div className="grid md:grid-cols-3 gap-6 mb-10">
+          <FeatureCard
+            title="Rules = Code"
+            description="Voting logic in smart contract. No platform can change the rules mid-vote."
+          />
+          <FeatureCard
+            title="Results = Blockchain State"
+            description="Every response has a transaction hash. Count yourself on Sui Explorer — don't trust our UI."
+          />
+          <FeatureCard
+            title="History = Permanent"
+            description="Decisions recorded forever. Build institutional memory. Reference past votes as facts."
+          />
+        </div>
+
+        <p className="text-center text-lg text-gray-600 dark:text-gray-400">
+          Code enforces rules. Blockchain proves results. History stays forever.
+        </p>
       </div>
     </section>
   );

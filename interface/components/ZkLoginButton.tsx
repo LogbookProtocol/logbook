@@ -39,11 +39,16 @@ export function ZkLoginButton() {
     };
   }, [isMenuOpen]);
 
-  const handleLogin = (chosenProvider: OAuthProvider) => {
+  const handleLogin = async (chosenProvider: OAuthProvider) => {
     setIsLoading(true);
     setSelectedProvider(chosenProvider);
-    const authUrl = getZkLoginUrl(chosenProvider);
-    window.location.href = authUrl;
+    try {
+      const authUrl = await getZkLoginUrl(chosenProvider);
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('Failed to initialize zkLogin:', error);
+      setIsLoading(false);
+    }
   };
 
   const handleLogout = () => {

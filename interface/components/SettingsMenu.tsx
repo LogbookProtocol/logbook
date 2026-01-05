@@ -3,30 +3,51 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import {
+  DateFormat,
+  TimeFormat,
+  getDateFormat,
+  setDateFormat,
+  getDateFormatOptions,
+  getTimeFormat,
+  setTimeFormat,
+  getTimeFormatOptions,
+} from '@/lib/format-date';
+import {
+  DataSource,
+  getDataSource,
+  setDataSource,
+} from '@/lib/sui-config';
 
 export function SettingsMenu() {
   const [isOpen, setIsOpen] = useState(false);
+  const [showThemes, setShowThemes] = useState(false);
   const [showLanguages, setShowLanguages] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { language, setLanguage, t } = useLanguage();
   const { themeMode, setThemeMode } = useTheme();
 
-  // AI settings from localStorage
-  const [aiEnabled, setAiEnabled] = useState(true);
-  const [aiAutoMode, setAiAutoMode] = useState(true);
+  // Date format settings
+  const [dateFormat, setDateFormatState] = useState<DateFormat>('auto');
+  const [showDateFormats, setShowDateFormats] = useState(false);
+  const dateFormatOptions = getDateFormatOptions();
+
+  // Time format settings
+  const [timeFormat, setTimeFormatState] = useState<TimeFormat>('auto');
+  const [showTimeFormats, setShowTimeFormats] = useState(false);
+  const timeFormatOptions = getTimeFormatOptions();
+
+  // Data source settings
+  const [dataSource, setDataSourceState] = useState<DataSource>('mock');
+  const [showDataSources, setShowDataSources] = useState(false);
 
   useEffect(() => {
-    const savedAiPreference = localStorage.getItem('ai_assistant_enabled');
-    if (savedAiPreference !== null) {
-      setAiEnabled(savedAiPreference === 'true');
-    }
-
-    const savedAutoMode = localStorage.getItem('ai_auto_mode');
-    if (savedAutoMode !== null) {
-      setAiAutoMode(savedAutoMode === 'true');
-    }
+    setDateFormatState(getDateFormat());
+    setTimeFormatState(getTimeFormat());
+    setDataSourceState(getDataSource());
   }, []);
 
+  // Close main menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -42,6 +63,71 @@ export function SettingsMenu() {
     };
   }, [isOpen]);
 
+  // Close any open submenu when clicking anywhere
+  useEffect(() => {
+    function handleGlobalClick() {
+      // Close all submenus on any click
+      setShowThemes(false);
+      setShowLanguages(false);
+      setShowDateFormats(false);
+      setShowTimeFormats(false);
+      setShowDataSources(false);
+    }
+
+    const anySubmenuOpen = showThemes || showLanguages || showDateFormats || showTimeFormats || showDataSources;
+    if (anySubmenuOpen) {
+      // Use setTimeout to let the current click event complete first
+      // This allows the option selection to happen before closing
+      const timer = setTimeout(() => {
+        document.addEventListener('click', handleGlobalClick, { once: true });
+      }, 0);
+      return () => {
+        clearTimeout(timer);
+        document.removeEventListener('click', handleGlobalClick);
+      };
+    }
+  }, [showThemes, showLanguages, showDateFormats, showTimeFormats, showDataSources]);
+
+  // Close all submenus
+  const closeAllSubmenus = () => {
+    setShowThemes(false);
+    setShowLanguages(false);
+    setShowDateFormats(false);
+    setShowTimeFormats(false);
+    setShowDataSources(false);
+  };
+
+  // Toggle submenu - close others first
+  const toggleThemes = () => {
+    const newState = !showThemes;
+    closeAllSubmenus();
+    setShowThemes(newState);
+  };
+
+  const toggleLanguages = () => {
+    const newState = !showLanguages;
+    closeAllSubmenus();
+    setShowLanguages(newState);
+  };
+
+  const toggleDateFormats = () => {
+    const newState = !showDateFormats;
+    closeAllSubmenus();
+    setShowDateFormats(newState);
+  };
+
+  const toggleTimeFormats = () => {
+    const newState = !showTimeFormats;
+    closeAllSubmenus();
+    setShowTimeFormats(newState);
+  };
+
+  const toggleDataSources = () => {
+    const newState = !showDataSources;
+    closeAllSubmenus();
+    setShowDataSources(newState);
+  };
+
   const handleLanguageSelect = (lang: 'en' | 'ru' | 'zh' | 'es' | 'ar' | 'hi' | 'pt' | 'fr' | 'de' | 'ja' | 'ko' | 'it' | 'tr' | 'ca') => {
     setLanguage(lang);
     setShowLanguages(false);
@@ -49,20 +135,44 @@ export function SettingsMenu() {
 
   const handleThemeSelect = (mode: 'auto' | 'light' | 'dark') => {
     setThemeMode(mode);
+    setShowThemes(false);
   };
 
-  const handleAiStatusToggle = (enabled: boolean) => {
-    setAiEnabled(enabled);
-    localStorage.setItem('ai_assistant_enabled', String(enabled));
-    // Dispatch custom event to notify CreateCampaignForm
-    window.dispatchEvent(new CustomEvent('ai-settings-changed', { detail: { enabled, autoMode: aiAutoMode } }));
+  const getThemeLabelText = (mode: 'auto' | 'light' | 'dark') => {
+    switch (mode) {
+      case 'auto': return 'Auto';
+      case 'light': return 'Light';
+      case 'dark': return 'Dark';
+    }
   };
 
-  const handleAiModeToggle = (autoMode: boolean) => {
-    setAiAutoMode(autoMode);
-    localStorage.setItem('ai_auto_mode', String(autoMode));
-    // Dispatch custom event to notify CreateCampaignForm
-    window.dispatchEvent(new CustomEvent('ai-settings-changed', { detail: { enabled: aiEnabled, autoMode } }));
+  const handleDateFormatSelect = (format: DateFormat) => {
+    setDateFormat(format);
+    setDateFormatState(format);
+    setShowDateFormats(false);
+  };
+
+  const handleTimeFormatSelect = (format: TimeFormat) => {
+    setTimeFormat(format);
+    setTimeFormatState(format);
+    setShowTimeFormats(false);
+  };
+
+  const handleDataSourceSelect = (source: DataSource) => {
+    setDataSource(source);
+    setDataSourceState(source);
+    setShowDataSources(false);
+    // Reload the page to apply the new data source
+    window.location.reload();
+  };
+
+  const getDataSourceLabel = (source: DataSource) => {
+    switch (source) {
+      case 'mock': return 'Mock Data';
+      case 'devnet': return 'Sui Devnet';
+      case 'testnet': return 'Sui Testnet';
+      case 'mainnet': return 'Sui Mainnet';
+    }
   };
 
   const getThemeLabel = () => {
@@ -92,7 +202,7 @@ export function SettingsMenu() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg overflow-hidden z-50">
+        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-50">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.title')}</h3>
           </div>
@@ -102,47 +212,50 @@ export function SettingsMenu() {
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('settings.general')}</p>
             </div>
 
-            {/* Theme Toggle */}
-            <div className="px-4 py-2">
-              <p className="text-sm text-gray-900 dark:text-gray-100 mb-2">{t('settings.theme')}</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleThemeSelect('auto')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-xs transition ${
-                    themeMode === 'auto'
-                      ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
+            {/* Theme Selection */}
+            <div className="px-4 py-2 relative">
+              <button
+                onClick={toggleThemes}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-sm text-gray-900 dark:text-gray-100">Theme</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    {getThemeLabelText(themeMode)}
+                  </span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform ${showThemes ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {showThemes && (
+                <div
+                  className="absolute left-0 right-0 top-full mt-1 mx-4 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-xl z-50 border border-gray-200 dark:border-gray-600"
                 >
-                  Auto
-                </button>
-                <button
-                  onClick={() => handleThemeSelect('light')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-xs transition ${
-                    themeMode === 'light'
-                      ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  Light
-                </button>
-                <button
-                  onClick={() => handleThemeSelect('dark')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-xs transition ${
-                    themeMode === 'dark'
-                      ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  Dark
-                </button>
-              </div>
+                  {(['auto', 'light', 'dark'] as const).map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => handleThemeSelect(mode)}
+                      className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between"
+                    >
+                      <span>{getThemeLabelText(mode)}</span>
+                      {themeMode === mode && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Language Selection */}
-            <div className="px-4 py-2">
+            <div className="px-4 py-2 relative">
               <button
-                onClick={() => setShowLanguages(!showLanguages)}
+                onClick={toggleLanguages}
                 className="w-full flex items-center justify-between text-left"
               >
                 <span className="text-sm text-gray-900 dark:text-gray-100">{t('settings.language')}</span>
@@ -162,228 +275,174 @@ export function SettingsMenu() {
               </button>
 
               {showLanguages && (
-                <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
-                  <button
-                    onClick={() => handleLanguageSelect('en')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'en'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.english')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('ru')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'ru'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.russian')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('zh')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'zh'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.chinese')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('es')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'es'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.spanish')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('ar')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'ar'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.arabic')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('hi')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'hi'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.hindi')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('pt')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'pt'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.portuguese')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('fr')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'fr'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.french')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('de')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'de'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.german')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('ja')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'ja'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.japanese')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('ko')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'ko'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.korean')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('it')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'it'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.italian')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('tr')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'tr'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.turkish')}
-                  </button>
-                  <button
-                    onClick={() => handleLanguageSelect('ca')}
-                    className={`w-full px-3 py-2 text-left rounded-lg text-sm transition ${
-                      language === 'ca'
-                        ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {t('language.catalan')}
-                  </button>
+                <div
+                  className="absolute left-0 right-0 top-full mt-1 mx-4 py-1 max-h-64 overflow-y-auto bg-gray-100 dark:bg-gray-700 rounded-lg shadow-xl z-50 border border-gray-200 dark:border-gray-600"
+                >
+                  {([
+                    { code: 'en', key: 'english' },
+                    { code: 'ru', key: 'russian' },
+                    { code: 'zh', key: 'chinese' },
+                    { code: 'es', key: 'spanish' },
+                    { code: 'ar', key: 'arabic' },
+                    { code: 'hi', key: 'hindi' },
+                    { code: 'pt', key: 'portuguese' },
+                    { code: 'fr', key: 'french' },
+                    { code: 'de', key: 'german' },
+                    { code: 'ja', key: 'japanese' },
+                    { code: 'ko', key: 'korean' },
+                    { code: 'it', key: 'italian' },
+                    { code: 'tr', key: 'turkish' },
+                    { code: 'ca', key: 'catalan' },
+                  ] as const).map(lang => (
+                    <button
+                      key={lang.code}
+                      onClick={() => handleLanguageSelect(lang.code)}
+                      className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between"
+                    >
+                      <span>{t(`language.${lang.key}`)}</span>
+                      {language === lang.code && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 my-2"></div>
-
-            <div className="px-4 py-2">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Campaign AI Assistant</p>
-            </div>
-
-            {/* AI Status Toggle */}
-            <div className="px-4 py-2">
-              <p className="text-sm text-gray-900 dark:text-gray-100 mb-2">Status</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleAiStatusToggle(true)}
-                  className={`flex-1 px-3 py-2 rounded-lg text-xs transition ${
-                    aiEnabled
-                      ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  On
-                </button>
-                <button
-                  onClick={() => handleAiStatusToggle(false)}
-                  className={`flex-1 px-3 py-2 rounded-lg text-xs transition ${
-                    !aiEnabled
-                      ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  Off
-                </button>
-              </div>
-            </div>
-
-            {/* AI Mode Toggle */}
-            <div className="px-4 py-2">
-              <p className="text-sm text-gray-900 dark:text-gray-100 mb-2">Apply Changes</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleAiModeToggle(true)}
-                  className={`flex-1 px-3 py-2 rounded-lg text-xs transition ${
-                    aiAutoMode
-                      ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  Automatically
-                </button>
-                <button
-                  onClick={() => handleAiModeToggle(false)}
-                  className={`flex-1 px-3 py-2 rounded-lg text-xs transition ${
-                    !aiAutoMode
-                      ? 'bg-gray-700 dark:bg-white text-white dark:text-gray-900'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  With Review
-                </button>
-              </div>
-            </div>
-
-            {/* Reset Chat Button */}
-            <div className="px-4 py-2">
+            {/* Date Format Selection */}
+            <div className="px-4 py-2 relative">
               <button
-                onClick={() => {
-                  console.log('🔴 Reset Chat History button clicked');
-                  // Dispatch event to clear chat history
-                  window.dispatchEvent(new CustomEvent('clear-ai-chat'));
-                  console.log('📤 clear-ai-chat event dispatched');
-                  setIsOpen(false);
-                }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-sm transition border border-red-200 dark:border-red-800"
+                onClick={toggleDateFormats}
+                className="w-full flex items-center justify-between text-left"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="text-xs font-medium">Reset AI Chat History</span>
+                <span className="text-sm text-gray-900 dark:text-gray-100">Date Format</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    {dateFormatOptions.find(o => o.value === dateFormat)?.label || 'Auto'}
+                  </span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform ${showDateFormats ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </button>
+
+              {showDateFormats && (
+                <div
+                  className="absolute left-0 right-0 top-full mt-1 mx-4 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-xl z-50 border border-gray-200 dark:border-gray-600"
+                >
+                  {dateFormatOptions.map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => handleDateFormatSelect(option.value)}
+                      className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between"
+                    >
+                      <span>
+                        {option.label}
+                        <span className="ml-2 opacity-60">({option.example})</span>
+                      </span>
+                      {dateFormat === option.value && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Time Format Selection */}
+            <div className="px-4 py-2 relative">
+              <button
+                onClick={toggleTimeFormats}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-sm text-gray-900 dark:text-gray-100">Time Format</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    {timeFormatOptions.find(o => o.value === timeFormat)?.label || 'Auto'}
+                  </span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform ${showTimeFormats ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {showTimeFormats && (
+                <div
+                  className="absolute left-0 right-0 top-full mt-1 mx-4 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-xl z-50 border border-gray-200 dark:border-gray-600"
+                >
+                  {timeFormatOptions.map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => handleTimeFormatSelect(option.value)}
+                      className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between"
+                    >
+                      <span>
+                        {option.label}
+                        <span className="ml-2 opacity-60">({option.example})</span>
+                      </span>
+                      {timeFormat === option.value && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="my-2 border-t border-gray-200 dark:border-gray-700" />
+
+            <div className="px-4 py-2">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data Source</p>
+            </div>
+
+            {/* Data Source Selection */}
+            <div className="px-4 py-2 relative">
+              <button
+                onClick={toggleDataSources}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-sm text-gray-900 dark:text-gray-100">Source</span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm ${dataSource === 'devnet' ? 'text-orange-600 dark:text-orange-400' : dataSource === 'testnet' ? 'text-cyan-600 dark:text-cyan-400' : dataSource === 'mainnet' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                    {getDataSourceLabel(dataSource)}
+                  </span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform ${showDataSources ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {showDataSources && (
+                <div
+                  className="absolute left-0 right-0 top-full mt-1 mx-4 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-xl z-50 border border-gray-200 dark:border-gray-600"
+                >
+                  {(['mock', 'devnet', 'testnet', 'mainnet'] as const).map(source => (
+                    <button
+                      key={source}
+                      onClick={() => handleDataSourceSelect(source)}
+                      disabled={source === 'mainnet'}
+                      className={`w-full px-3 py-1.5 text-left text-sm hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between ${source === 'mainnet' ? 'opacity-50 cursor-not-allowed' : ''} ${source === 'devnet' ? 'text-orange-600 dark:text-orange-400' : source === 'testnet' ? 'text-cyan-600 dark:text-cyan-400' : source === 'mainnet' ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}
+                    >
+                      <span>
+                        {getDataSourceLabel(source)}
+                        {source === 'devnet' && <span className="ml-2 opacity-60">(zkLogin)</span>}
+                        {source === 'mainnet' && <span className="ml-2 opacity-60">(Coming soon)</span>}
+                      </span>
+                      {dataSource === source && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

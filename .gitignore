@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Move/Sui build artifacts
 protocol/build/
+
+# Sponsorship data (server-side storage)
+interface/data/

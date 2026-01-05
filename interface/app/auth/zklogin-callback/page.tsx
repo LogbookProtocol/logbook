@@ -58,8 +58,19 @@ export default function ZkLoginCallback() {
 
       setStatus('Success! Redirecting...');
 
+      // Get return URL or default to home
+      const returnUrl = sessionStorage.getItem('zklogin_return_url') || '/';
+      const scrollPosition = sessionStorage.getItem('zklogin_scroll_position');
+      sessionStorage.removeItem('zklogin_return_url');
+      sessionStorage.removeItem('zklogin_scroll_position');
+
+      // Store scroll position to restore after navigation
+      if (scrollPosition) {
+        sessionStorage.setItem('restore_scroll_position', scrollPosition);
+      }
+
       setTimeout(() => {
-        router.push('/');
+        router.push(returnUrl);
       }, 1000);
 
     } catch (err: any) {

@@ -72,6 +72,27 @@ const blockColors = Array.from({ length: BLOCK_COUNT }, (_, i) => {
   return interpolateColor(t);
 });
 
+// Generate connection lines between adjacent blocks in grid
+function generateConnections() {
+  const connections: { from: number; to: number }[] = [];
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      const i = row * GRID_SIZE + col;
+      // Horizontal connection (to right neighbor)
+      if (col < GRID_SIZE - 1) {
+        connections.push({ from: i, to: i + 1 });
+      }
+      // Vertical connection (to bottom neighbor)
+      if (row < GRID_SIZE - 1) {
+        connections.push({ from: i, to: i + GRID_SIZE });
+      }
+    }
+  }
+  return connections;
+}
+
+const connections = generateConnections();
+
 export function TransformAnimation() {
   const [isOrdered, setIsOrdered] = useState(false);
 
@@ -85,11 +106,41 @@ export function TransformAnimation() {
   const positions = isOrdered ? orderPositions : chaosPositions;
 
   return (
-    <div className="relative w-full aspect-square max-w-[280px] mx-auto">
+    <div className="relative w-full h-full">
+      {/* Connection lines - only visible when ordered */}
+      <svg
+        className="absolute inset-0 w-full h-full transition-opacity duration-1000"
+        style={{ opacity: isOrdered ? 0.6 : 0 }}
+        preserveAspectRatio="none"
+      >
+        {connections.map((conn, i) => {
+          const from = orderPositions[conn.from];
+          const to = orderPositions[conn.to];
+          return (
+            <line
+              key={i}
+              x1={`${from.x}%`}
+              y1={`${from.y}%`}
+              x2={`${to.x}%`}
+              y2={`${to.y}%`}
+              stroke="url(#lineGradient)"
+              strokeWidth="1.5"
+            />
+          );
+        })}
+        <defs>
+          <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#22d3ee" />
+            <stop offset="100%" stopColor="#3b82f6" />
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {/* Blocks */}
       {positions.map((pos, i) => (
         <div
           key={i}
-          className="absolute w-3 h-3 transition-all duration-1000 ease-in-out"
+          className="absolute w-3 h-3 transition-all duration-1000 ease-in-out flex items-center justify-center"
           style={{
             left: `${pos.x}%`,
             top: `${pos.y}%`,
@@ -97,12 +148,23 @@ export function TransformAnimation() {
             backgroundColor: blockColors[i],
             borderRadius: isOrdered ? '0%' : '50%',
           }}
-        />
+        >
+          {/* Checkmark - only visible when ordered */}
+          <svg
+            className="w-2 h-2 text-white transition-opacity duration-500"
+            style={{
+              opacity: isOrdered ? 1 : 0,
+              transitionDelay: isOrdered ? `${(i % 20) * 30}ms` : '0ms'
+            }}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={4}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
       ))}
-
-      <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-sm text-gray-500">
-        {isOrdered ? 'Order' : 'Chaos'}
-      </div>
     </div>
   );
 }
