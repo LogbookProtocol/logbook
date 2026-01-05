@@ -73,7 +73,7 @@ export default function StatsPage() {
 
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Protocol Statistics</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-2">Protocol Statistics</h1>
         <p className="text-gray-500 dark:text-gray-400">
           {isMock ? 'Demo metrics (mock data)' : `Live metrics from ${networkLabel}`}
         </p>

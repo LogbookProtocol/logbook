@@ -207,7 +207,7 @@ export default function NewCampaignPage() {
           >
             ← Back to editing
           </button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Review Campaign</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">Review Campaign</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">Check everything before deploying</p>
         </div>
 
@@ -309,7 +309,7 @@ export default function NewCampaignPage() {
         >
           ← Back
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">New Campaign</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">New Campaign</h1>
       </div>
 
       {/* Campaign Info */}

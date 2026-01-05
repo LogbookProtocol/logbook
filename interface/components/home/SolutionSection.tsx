@@ -24,7 +24,7 @@ export function SolutionSection() {
     <section className="py-20 px-6">
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-6">
             Don't trust. Verify.
           </h2>
           <p className="text-base md:text-lg text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">

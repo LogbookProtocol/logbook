@@ -8,11 +8,12 @@ import { saveReferrer } from '@/lib/navigation';
 export function HeroSection() {
   const router = useRouter();
   const { requireAuth } = useAuth();
+
   return (
     <section className="min-h-screen flex items-center justify-center relative -mt-20 pt-20 overflow-visible">
       <FloatingBlocks />
 
-      <div className="relative z-10 text-center max-w-4xl px-6 -translate-y-32">
+      <div className="relative z-10 text-center max-w-4xl px-6">
         {/* Built on Sui badge */}
         <div className="flex justify-center mb-6">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-700 dark:text-cyan-400">
@@ -23,7 +24,10 @@ export function HeroSection() {
             Sui
           </span>
         </div>
-        <h1 className="text-6xl md:text-8xl font-bold mb-8 tracking-tight leading-[1.05] select-none">
+        <h1
+          className="font-bold mb-8 tracking-tight leading-[1.05] select-none"
+          style={{ fontSize: 'clamp(3rem, 12vh, 8rem)' }}
+        >
           <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
             Verifiable.<br />Immutable.<br />Permanent.
           </span>
@@ -47,21 +51,6 @@ export function HeroSection() {
         </button>
       </div>
 
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-        <svg
-          className="w-6 h-6 text-gray-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 14l-7 7m0 0l-7-7m7 7V3"
-          />
-        </svg>
-      </div>
     </section>
   );
 }

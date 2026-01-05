@@ -213,7 +213,7 @@ export default function DocsPage() {
             </svg>
             <span className="text-sm font-medium tracking-wide uppercase">Documentation</span>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">
+          <h1 className="text-4xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-3">
             Learn Logbook
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl">

@@ -170,7 +170,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{campaign.title}</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">{campaign.title}</h1>
               <span
                 className={`px-3 py-1 rounded-full text-sm ${
                   campaign.status === 'active'

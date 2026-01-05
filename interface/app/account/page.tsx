@@ -44,7 +44,7 @@ function AccountContent() {
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
             {mockUserAccount.suinsName && (
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{mockUserAccount.suinsName}</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">{mockUserAccount.suinsName}</h1>
             )}
             {mockUserAccount.authMethod === 'google' && (
               <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400">

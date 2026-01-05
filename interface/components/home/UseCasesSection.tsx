@@ -24,7 +24,7 @@ export function UseCasesSection() {
   return (
     <section className="py-20 px-6">
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-4xl font-bold text-center text-gray-900 dark:text-white mb-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-center text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-4">
           Built for coordination
         </h2>
         <p className="text-base md:text-lg text-gray-600 dark:text-gray-400 text-center mb-16 max-w-2xl mx-auto">

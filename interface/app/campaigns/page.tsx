@@ -229,7 +229,7 @@ function CampaignsContent() {
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Campaigns</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-2">Campaigns</h1>
           <p className="text-gray-500 dark:text-gray-400">
             {activeTab === 'created' && "Campaigns you've created"}
             {activeTab === 'participated' && "Campaigns you've participated in"}

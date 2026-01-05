@@ -20,7 +20,7 @@ export function CTASection() {
   return (
     <section className="py-24 md:py-32 px-6">
       <div className="max-w-3xl mx-auto text-center">
-        <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-3">
+        <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-3">
           Create your first campaign
         </h2>
         <p className="text-lg text-gray-600 dark:text-gray-400 mb-10">

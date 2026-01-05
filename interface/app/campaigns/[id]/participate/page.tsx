@@ -210,7 +210,7 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
         >
           ← Back
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{campaign.title}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">{campaign.title}</h1>
       </div>
 
       {/* Progress */}

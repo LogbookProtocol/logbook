@@ -71,7 +71,7 @@ export function ComparisonSection() {
   return (
     <section className="py-20 px-6 bg-gray-50 dark:bg-white/[0.02]">
       <div className="max-w-5xl mx-auto">
-        <h2 className="text-3xl md:text-4xl font-bold text-center text-gray-900 dark:text-white mb-12">
+        <h2 className="text-3xl md:text-4xl font-bold text-center text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-12">
           Traditional tools vs. blockchain verification
         </h2>
 

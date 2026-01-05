@@ -23,7 +23,7 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex items-center gap-1">
       <button
         onClick={() => setThemeMode('light')}
         className={`p-1.5 rounded transition-all hover:bg-gray-100 dark:hover:bg-gray-800 ${

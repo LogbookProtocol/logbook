@@ -467,41 +467,6 @@ export function FloatingBlocks() {
       // Use nextGridIndexRef to prevent spawning while last block is still animating
       const gridFull = nextGridIndexRef.current >= TOTAL_BLOCKS;
 
-      // Draw grid placeholder (empty cells as subtle gray blocks)
-      const gridWidth = GRID_COLS * (BLOCK_SIZE + GRID_GAP);
-      const gridStartX = (mainCanvas.width - gridWidth) / 2;
-      const gridEndX = gridStartX + gridWidth;
-
-      ctx.globalAlpha = 0.04;
-      ctx.fillStyle = 'rgb(128, 128, 128)';
-      // Draw 6 rows × 20 cols
-      for (let row = 0; row < MAX_ROWS; row++) {
-        for (let col = 0; col < GRID_COLS; col++) {
-          const x = gridStartX + col * (BLOCK_SIZE + GRID_GAP) + BLOCK_SIZE / 2;
-          const y = gridBaseYRef.current - row * (BLOCK_SIZE + GRID_GAP);
-          ctx.fillRect(x - BLOCK_SIZE / 2, y - BLOCK_SIZE / 2, BLOCK_SIZE, BLOCK_SIZE);
-        }
-      }
-      // Draw the 121st block (leftmost on row 7)
-      const topBlockX = gridStartX + BLOCK_SIZE / 2;
-      const topBlockY = gridBaseYRef.current - MAX_ROWS * (BLOCK_SIZE + GRID_GAP);
-      ctx.fillRect(topBlockX - BLOCK_SIZE / 2, topBlockY - BLOCK_SIZE / 2, BLOCK_SIZE, BLOCK_SIZE);
-
-      // Draw settled blocks on top of the placeholder grid
-      for (const block of settledBlocksRef.current) {
-        ctx.globalAlpha = 0.6;
-
-        // Calculate color based on horizontal position in grid (gradient from cyan to blue)
-        const progress = (block.x - gridStartX) / (gridEndX - gridStartX);
-        // Interpolate between cyan (#22d3ee) and blue (#3b82f6)
-        const r = Math.round(34 + (59 - 34) * progress);
-        const g = Math.round(211 + (130 - 211) * progress);
-        const b = Math.round(238 + (246 - 238) * progress);
-
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        ctx.fillRect(block.x - block.size / 2, block.y - block.size / 2, block.size, block.size);
-      }
-      ctx.globalAlpha = 1;
 
       // Update and draw active responses
       const toRemove: number[] = [];
@@ -600,181 +565,182 @@ export function FloatingBlocks() {
             break;
         }
 
-        // Draw response
-        if (resp.state !== 'settled') {
-          // Draw light beam during travel (no block, just the beam)
-          if (resp.state === 'traveling') {
-            // Beam starts from center of card (card is at x+16, width ~220, height 72)
-            const cardCenterX = resp.startX + 16 + 110; // cardX + half of typical card width
-            const cardCenterY = resp.startY; // card is centered vertically on spawn point
+        // TEMPORARILY DISABLED: Cards, beams, and settling blocks
+        // // Draw response
+        // if (resp.state !== 'settled') {
+        //   // Draw light beam during travel (no block, just the beam)
+        //   if (resp.state === 'traveling') {
+        //     // Beam starts from center of card (card is at x+16, width ~220, height 72)
+        //     const cardCenterX = resp.startX + 16 + 110; // cardX + half of typical card width
+        //     const cardCenterY = resp.startY; // card is centered vertically on spawn point
 
-            // Calculate beam head position
-            const travelProgress = Math.min(1, resp.stateTime / 300);
-            const beamHeadX = cardCenterX + (resp.targetX - cardCenterX) * travelProgress;
-            const beamHeadY = cardCenterY + (resp.targetY - cardCenterY) * travelProgress;
+        //     // Calculate beam head position
+        //     const travelProgress = Math.min(1, resp.stateTime / 300);
+        //     const beamHeadX = cardCenterX + (resp.targetX - cardCenterX) * travelProgress;
+        //     const beamHeadY = cardCenterY + (resp.targetY - cardCenterY) * travelProgress;
 
-            // Beam tail follows behind (shorter trail)
-            const tailProgress = Math.max(0, travelProgress - 0.3);
-            const beamTailX = cardCenterX + (resp.targetX - cardCenterX) * tailProgress;
-            const beamTailY = cardCenterY + (resp.targetY - cardCenterY) * tailProgress;
+        //     // Beam tail follows behind (shorter trail)
+        //     const tailProgress = Math.max(0, travelProgress - 0.3);
+        //     const beamTailX = cardCenterX + (resp.targetX - cardCenterX) * tailProgress;
+        //     const beamTailY = cardCenterY + (resp.targetY - cardCenterY) * tailProgress;
 
-            const trailGradient = ctx.createLinearGradient(
-              beamTailX, beamTailY,
-              beamHeadX, beamHeadY
-            );
-            trailGradient.addColorStop(0, 'rgba(34, 211, 238, 0)');
-            trailGradient.addColorStop(0.5, 'rgba(34, 211, 238, 0.6)');
-            trailGradient.addColorStop(1, resp.label.avatarColor);
+        //     const trailGradient = ctx.createLinearGradient(
+        //       beamTailX, beamTailY,
+        //       beamHeadX, beamHeadY
+        //     );
+        //     trailGradient.addColorStop(0, 'rgba(34, 211, 238, 0)');
+        //     trailGradient.addColorStop(0.5, 'rgba(34, 211, 238, 0.6)');
+        //     trailGradient.addColorStop(1, resp.label.avatarColor);
 
-            ctx.beginPath();
-            ctx.strokeStyle = trailGradient;
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.moveTo(beamTailX, beamTailY);
-            ctx.lineTo(beamHeadX, beamHeadY);
-            ctx.stroke();
+        //     ctx.beginPath();
+        //     ctx.strokeStyle = trailGradient;
+        //     ctx.lineWidth = 4;
+        //     ctx.lineCap = 'round';
+        //     ctx.moveTo(beamTailX, beamTailY);
+        //     ctx.lineTo(beamHeadX, beamHeadY);
+        //     ctx.stroke();
 
-            // Glow at beam head
-            ctx.save();
-            ctx.globalAlpha = 0.6;
-            const glowGradient = ctx.createRadialGradient(beamHeadX, beamHeadY, 0, beamHeadX, beamHeadY, 20);
-            glowGradient.addColorStop(0, resp.label.avatarColor);
-            glowGradient.addColorStop(1, 'transparent');
-            ctx.fillStyle = glowGradient;
-            ctx.beginPath();
-            ctx.arc(beamHeadX, beamHeadY, 20, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-          }
+        //     // Glow at beam head
+        //     ctx.save();
+        //     ctx.globalAlpha = 0.6;
+        //     const glowGradient = ctx.createRadialGradient(beamHeadX, beamHeadY, 0, beamHeadX, beamHeadY, 20);
+        //     glowGradient.addColorStop(0, resp.label.avatarColor);
+        //     glowGradient.addColorStop(1, 'transparent');
+        //     ctx.fillStyle = glowGradient;
+        //     ctx.beginPath();
+        //     ctx.arc(beamHeadX, beamHeadY, 20, 0, Math.PI * 2);
+        //     ctx.fill();
+        //     ctx.restore();
+        //   }
 
-          // Draw block only during settling (block appears when beam reaches destination)
-          if (resp.state === 'settling') {
-            ctx.save();
-            ctx.translate(resp.x, resp.y);
-            // Fade in effect
-            const settleProgress = Math.min(1, resp.stateTime / 100);
-            ctx.globalAlpha = settleProgress;
+        //   // Draw block only during settling (block appears when beam reaches destination)
+        //   if (resp.state === 'settling') {
+        //     ctx.save();
+        //     ctx.translate(resp.x, resp.y);
+        //     // Fade in effect
+        //     const settleProgress = Math.min(1, resp.stateTime / 100);
+        //     ctx.globalAlpha = settleProgress;
 
-            // Use the avatar color for the block
-            ctx.fillStyle = resp.label.avatarColor;
-            ctx.fillRect(-resp.size / 2, -resp.size / 2, resp.size, resp.size);
-            ctx.restore();
-          }
+        //     // Use the avatar color for the block
+        //     ctx.fillStyle = resp.label.avatarColor;
+        //     ctx.fillRect(-resp.size / 2, -resp.size / 2, resp.size, resp.size);
+        //     ctx.restore();
+        //   }
 
-          // Draw label
-          if (resp.labelOpacity > 0 && (resp.state === 'spawning' || resp.state === 'showing' || resp.state === 'traveling')) {
-            ctx.save();
-            ctx.globalAlpha = resp.labelOpacity;
+        //   // Draw label
+        //   if (resp.labelOpacity > 0 && (resp.state === 'spawning' || resp.state === 'showing' || resp.state === 'traveling')) {
+        //     ctx.save();
+        //     ctx.globalAlpha = resp.labelOpacity;
 
-            const avatarSize = 36;
-            const padding = 12;
-            const textStartX = padding + avatarSize + 16; // avatar area + gap
+        //     const avatarSize = 36;
+        //     const padding = 12;
+        //     const textStartX = padding + avatarSize + 16; // avatar area + gap
 
-            // Campaign name as second line
-            const secondLineText = resp.label.campaign;
+        //     // Campaign name as second line
+        //     const secondLineText = resp.label.campaign;
 
-            // Measure text widths to calculate card width
-            ctx.font = 'bold 13px system-ui, sans-serif';
-            const nameWidth = ctx.measureText(resp.label.name).width;
-            ctx.font = '9px system-ui, sans-serif';
-            const authLabel = resp.label.authType === 'google' ? 'Google' : resp.label.authType.charAt(0).toUpperCase() + resp.label.authType.slice(1);
-            const authBadgeWidth = ctx.measureText(`via ${authLabel}`).width + 6;
-            ctx.font = '11px system-ui, sans-serif';
-            const companyWidth = ctx.measureText(secondLineText).width;
-            const actionWidth = ctx.measureText(resp.label.action).width;
+        //     // Measure text widths to calculate card width
+        //     ctx.font = 'bold 13px system-ui, sans-serif';
+        //     const nameWidth = ctx.measureText(resp.label.name).width;
+        //     ctx.font = '9px system-ui, sans-serif';
+        //     const authLabel = resp.label.authType === 'google' ? 'Google' : resp.label.authType.charAt(0).toUpperCase() + resp.label.authType.slice(1);
+        //     const authBadgeWidth = ctx.measureText(`via ${authLabel}`).width + 6;
+        //     ctx.font = '11px system-ui, sans-serif';
+        //     const companyWidth = ctx.measureText(secondLineText).width;
+        //     const actionWidth = ctx.measureText(resp.label.action).width;
 
-            const maxTextWidth = Math.max(nameWidth + authBadgeWidth, companyWidth, actionWidth);
-            const cardWidth = Math.max(220, textStartX + maxTextWidth + padding + 8);
-            const cardHeight = 72;
-            const cardX = resp.x + 16;
-            const cardY = resp.y - cardHeight / 2;
+        //     const maxTextWidth = Math.max(nameWidth + authBadgeWidth, companyWidth, actionWidth);
+        //     const cardWidth = Math.max(220, textStartX + maxTextWidth + padding + 8);
+        //     const cardHeight = 72;
+        //     const cardX = resp.x + 16;
+        //     const cardY = resp.y - cardHeight / 2;
 
-            // Theme-aware colors
-            const isDark = isDarkModeRef.current;
-            const cardBg = isDark ? 'rgba(20, 30, 48, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-            const borderColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)';
-            const shadowColor = isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.15)';
-            const nameColor = isDark ? '#ffffff' : '#1f2937';
-            const secondaryColor = isDark ? 'rgba(148, 163, 184, 0.9)' : 'rgba(107, 114, 128, 0.9)';
-            const tertiaryColor = isDark ? 'rgba(148, 163, 184, 0.7)' : 'rgba(156, 163, 175, 0.8)';
+        //     // Theme-aware colors
+        //     const isDark = isDarkModeRef.current;
+        //     const cardBg = isDark ? 'rgba(20, 30, 48, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+        //     const borderColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)';
+        //     const shadowColor = isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.15)';
+        //     const nameColor = isDark ? '#ffffff' : '#1f2937';
+        //     const secondaryColor = isDark ? 'rgba(148, 163, 184, 0.9)' : 'rgba(107, 114, 128, 0.9)';
+        //     const tertiaryColor = isDark ? 'rgba(148, 163, 184, 0.7)' : 'rgba(156, 163, 175, 0.8)';
 
-            // Shadow
-            ctx.shadowColor = shadowColor;
-            ctx.shadowBlur = 20;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 4;
+        //     // Shadow
+        //     ctx.shadowColor = shadowColor;
+        //     ctx.shadowBlur = 20;
+        //     ctx.shadowOffsetX = 0;
+        //     ctx.shadowOffsetY = 4;
 
-            // Background
-            ctx.fillStyle = cardBg;
-            ctx.beginPath();
-            ctx.roundRect(cardX, cardY, cardWidth, cardHeight, 12);
-            ctx.fill();
+        //     // Background
+        //     ctx.fillStyle = cardBg;
+        //     ctx.beginPath();
+        //     ctx.roundRect(cardX, cardY, cardWidth, cardHeight, 12);
+        //     ctx.fill();
 
-            // Reset shadow for other elements
-            ctx.shadowColor = 'transparent';
-            ctx.shadowBlur = 0;
+        //     // Reset shadow for other elements
+        //     ctx.shadowColor = 'transparent';
+        //     ctx.shadowBlur = 0;
 
-            // Border
-            ctx.strokeStyle = borderColor;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.roundRect(cardX, cardY, cardWidth, cardHeight, 12);
-            ctx.stroke();
+        //     // Border
+        //     ctx.strokeStyle = borderColor;
+        //     ctx.lineWidth = 1;
+        //     ctx.beginPath();
+        //     ctx.roundRect(cardX, cardY, cardWidth, cardHeight, 12);
+        //     ctx.stroke();
 
-            // Left accent bar (inside the card, matching the rounded corners)
-            ctx.fillStyle = resp.label.avatarColor;
-            ctx.beginPath();
-            ctx.roundRect(cardX, cardY, 4, cardHeight, [12, 0, 0, 12]);
-            ctx.fill();
+        //     // Left accent bar (inside the card, matching the rounded corners)
+        //     ctx.fillStyle = resp.label.avatarColor;
+        //     ctx.beginPath();
+        //     ctx.roundRect(cardX, cardY, 4, cardHeight, [12, 0, 0, 12]);
+        //     ctx.fill();
 
-            // Avatar circle with initials
-            const avatarX = cardX + padding + avatarSize / 2 + 4;
-            const avatarY = cardY + cardHeight / 2;
+        //     // Avatar circle with initials
+        //     const avatarX = cardX + padding + avatarSize / 2 + 4;
+        //     const avatarY = cardY + cardHeight / 2;
 
-            // Avatar background
-            ctx.fillStyle = resp.label.avatarColor;
-            ctx.beginPath();
-            ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
-            ctx.fill();
+        //     // Avatar background
+        //     ctx.fillStyle = resp.label.avatarColor;
+        //     ctx.beginPath();
+        //     ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+        //     ctx.fill();
 
-            // Avatar initials
-            const initials = resp.label.name.charAt(0).toUpperCase();
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 14px system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(initials, avatarX, avatarY);
+        //     // Avatar initials
+        //     const initials = resp.label.name.charAt(0).toUpperCase();
+        //     ctx.fillStyle = 'white';
+        //     ctx.font = 'bold 14px system-ui, sans-serif';
+        //     ctx.textAlign = 'center';
+        //     ctx.textBaseline = 'middle';
+        //     ctx.fillText(initials, avatarX, avatarY);
 
-            // Text content
-            const textX = avatarX + avatarSize / 2 + 12;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'alphabetic';
+        //     // Text content
+        //     const textX = avatarX + avatarSize / 2 + 12;
+        //     ctx.textAlign = 'left';
+        //     ctx.textBaseline = 'alphabetic';
 
-            // Name
-            ctx.fillStyle = nameColor;
-            ctx.font = 'bold 13px system-ui, sans-serif';
-            ctx.fillText(resp.label.name, textX, cardY + 24);
+        //     // Name
+        //     ctx.fillStyle = nameColor;
+        //     ctx.font = 'bold 13px system-ui, sans-serif';
+        //     ctx.fillText(resp.label.name, textX, cardY + 24);
 
-            // Auth type badge (next to name)
-            ctx.font = 'bold 13px system-ui, sans-serif'; // Reset to name font to measure
-            const nameEndX = textX + ctx.measureText(resp.label.name).width + 6;
-            ctx.font = '9px system-ui, sans-serif';
-            ctx.fillStyle = tertiaryColor;
-            ctx.fillText(`via ${authLabel}`, nameEndX, cardY + 24);
+        //     // Auth type badge (next to name)
+        //     ctx.font = 'bold 13px system-ui, sans-serif'; // Reset to name font to measure
+        //     const nameEndX = textX + ctx.measureText(resp.label.name).width + 6;
+        //     ctx.font = '9px system-ui, sans-serif';
+        //     ctx.fillStyle = tertiaryColor;
+        //     ctx.fillText(`via ${authLabel}`, nameEndX, cardY + 24);
 
-            // Second line: space with @ symbol, or campaign name
-            ctx.fillStyle = secondaryColor;
-            ctx.font = '11px system-ui, sans-serif';
-            ctx.fillText(secondLineText, textX, cardY + 40);
+        //     // Second line: space with @ symbol, or campaign name
+        //     ctx.fillStyle = secondaryColor;
+        //     ctx.font = '11px system-ui, sans-serif';
+        //     ctx.fillText(secondLineText, textX, cardY + 40);
 
-            // Action
-            ctx.fillStyle = resp.label.avatarColor;
-            ctx.font = '11px system-ui, sans-serif';
-            ctx.fillText(resp.label.action, textX, cardY + 58);
+        //     // Action
+        //     ctx.fillStyle = resp.label.avatarColor;
+        //     ctx.font = '11px system-ui, sans-serif';
+        //     ctx.fillText(resp.label.action, textX, cardY + 58);
 
-            ctx.restore();
-          }
-        }
+        //     ctx.restore();
+        //   }
+        // }
       }
 
       // Remove settled responses from active list
