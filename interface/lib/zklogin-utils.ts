@@ -3,7 +3,7 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { SuiClient } from '@mysten/sui/client';
 import { toBase64 } from '@mysten/sui/utils';
 
-const GOOGLE_CLIENT_ID = '958021889620-eks8rjgllfbg4lgcrqr5kebopequs6fj.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = '677620785976-lcr0umvoh8tt4fckjblfuvnipev0sle8.apps.googleusercontent.com';
 // prover-dev.mystenlabs.com uses Devnet zkey - matches our devnet deployment
 const PROVER_URL = 'https://prover-dev.mystenlabs.com/v1';
 const SUI_NETWORK_URL = 'https://fullnode.devnet.sui.io:443';
