@@ -4,13 +4,18 @@ import { useRouter } from 'next/navigation';
 import { FloatingBlocks } from '@/components/FloatingBlocks';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveReferrer } from '@/lib/navigation';
+import { useDevice } from '@/hooks/useDevice';
 
 export function HeroSection() {
   const router = useRouter();
   const { requireAuth } = useAuth();
+  const { isMobile } = useDevice();
 
   return (
-    <section className="min-h-screen flex items-center justify-center relative -mt-20 pt-20 overflow-visible">
+    <section
+      className="flex items-center justify-center relative -mt-14 pt-14 overflow-visible"
+      style={{ minHeight: isMobile ? 'calc(100vh - 80px)' : '100vh' }}
+    >
       <FloatingBlocks />
 
       <div className="relative z-10 text-center max-w-4xl px-6">
@@ -26,7 +31,7 @@ export function HeroSection() {
         </div>
         <h1
           className="font-bold mb-8 tracking-tight leading-[1.05] select-none"
-          style={{ fontSize: 'clamp(3rem, 12vh, 8rem)' }}
+          style={{ fontSize: 'clamp(4.25rem, 10vw, 8rem)' }}
         >
           <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
             Verifiable.<br />Immutable.<br />Permanent.

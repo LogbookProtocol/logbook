@@ -40,7 +40,7 @@ export function CTASection() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white dark:bg-white/5 rounded-xl p-5 text-center border border-gray-200 dark:border-white/10 flex flex-col justify-center">
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-2"><span className="bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent font-medium">Logbook</span> sponsors your first 2 campaigns and 10 responses</p>
               <p className="text-xl font-bold text-cyan-600 dark:text-cyan-400">FREE</p>

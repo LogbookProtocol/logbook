@@ -8,6 +8,7 @@ interface ComparisonRowProps {
   logbook: ReactNode;
 }
 
+// Desktop table row
 function ComparisonRow({ category, traditional, logbook }: ComparisonRowProps) {
   return (
     <tr className="border-b border-gray-200 dark:border-white/10">
@@ -21,6 +22,27 @@ function ComparisonRow({ category, traditional, logbook }: ComparisonRowProps) {
         {logbook}
       </td>
     </tr>
+  );
+}
+
+// Mobile card
+function ComparisonCard({ category, traditional, logbook }: ComparisonRowProps) {
+  return (
+    <div className="bg-white dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/10">
+        <span className="font-medium text-gray-900 dark:text-white text-sm">{category}</span>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-gray-200 dark:divide-white/10">
+        <div className="p-4 text-sm text-gray-600 dark:text-gray-400">
+          <div className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">Traditional</div>
+          {traditional}
+        </div>
+        <div className="p-4 text-sm text-gray-700 dark:text-gray-300 bg-cyan-500/5 dark:bg-cyan-500/10">
+          <div className="text-[10px] uppercase tracking-wider text-cyan-600 dark:text-cyan-400 mb-1">Logbook</div>
+          {logbook}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -75,11 +97,12 @@ export function ComparisonSection() {
           Traditional tools vs. blockchain verification
         </h2>
 
-        <div className="overflow-x-auto mb-12">
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto mb-12">
           <table className="w-full border-collapse min-w-[600px]">
             <thead>
               <tr className="bg-gray-800 dark:bg-gray-800">
-                <th className="text-left py-4 px-4 md:px-6 text-white font-medium rounded-tl-lg w-[180px]"></th>
+                <th className="text-left py-4 px-4 md:px-6 text-white font-medium rounded-tl-lg w-[180px] bg-gray-700">Criteria</th>
                 <th className="text-left py-4 px-4 md:px-6 text-gray-300 font-medium">
                   Traditional Tools
                 </th>
@@ -96,6 +119,13 @@ export function ComparisonSection() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="sm:hidden flex flex-col gap-4 mb-12">
+          {comparisons.map((row) => (
+            <ComparisonCard key={row.category} {...row} />
+          ))}
         </div>
 
         {/* Summary */}
