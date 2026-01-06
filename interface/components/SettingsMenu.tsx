@@ -22,20 +22,20 @@ const otherVerifiedLanguages: { code: string; key: string }[] = [
 
 // AI generated languages (machine translations, not yet reviewed)
 const aiGeneratedLanguages = [
-  { code: 'ru', key: 'russian' },
-  { code: 'zh', key: 'chinese' },
-  { code: 'es', key: 'spanish' },
-  { code: 'he', key: 'hebrew' },
-  { code: 'uk', key: 'ukrainian' },
-  { code: 'be', key: 'belarusian' },
-  { code: 'pt', key: 'portuguese' },
-  { code: 'fr', key: 'french' },
-  { code: 'de', key: 'german' },
-  { code: 'ja', key: 'japanese' },
-  { code: 'ko', key: 'korean' },
-  { code: 'it', key: 'italian' },
-  { code: 'tr', key: 'turkish' },
-  { code: 'ca', key: 'catalan' },
+  // { code: 'ru', key: 'russian' },
+  // { code: 'zh', key: 'chinese' },
+  // { code: 'es', key: 'spanish' },
+  // { code: 'he', key: 'hebrew' },
+  // { code: 'uk', key: 'ukrainian' },
+  // { code: 'be', key: 'belarusian' },
+  // { code: 'pt', key: 'portuguese' },
+  // { code: 'fr', key: 'french' },
+  // { code: 'de', key: 'german' },
+  // { code: 'ja', key: 'japanese' },
+  // { code: 'ko', key: 'korean' },
+  // { code: 'it', key: 'italian' },
+  // { code: 'tr', key: 'turkish' },
+  // { code: 'ca', key: 'catalan' },
 ] as const;
 
 // Auto option is always first
