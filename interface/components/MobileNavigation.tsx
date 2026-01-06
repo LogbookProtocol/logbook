@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import { ConnectOptionsModal } from '@/components/ConnectOptionsModal';
 
@@ -54,6 +54,7 @@ const navItems: NavItem[] = [
     href: '/campaigns/new',
     label: 'Create',
     icon: <CreateIcon className="w-6 h-6" />,
+    requiresAuth: true,
   },
   {
     href: '/account',
@@ -68,6 +69,8 @@ export function MobileNavigation() {
   const walletAccount = useCurrentAccount();
   const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const shouldScrollToTop = useRef(false);
+  const prevPathname = useRef(pathname);
 
   // Check zkLogin address
   useEffect(() => {
@@ -85,6 +88,18 @@ export function MobileNavigation() {
       window.removeEventListener('zklogin-changed', checkZkLogin);
     };
   }, []);
+
+  // Scroll to top when navigating to home page
+  useEffect(() => {
+    if (pathname === '/' && prevPathname.current !== '/' && shouldScrollToTop.current) {
+      // Small delay to let Next.js finish its scroll restoration
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      });
+      shouldScrollToTop.current = false;
+    }
+    prevPathname.current = pathname;
+  }, [pathname]);
 
   const connectedAddress = walletAccount?.address || zkLoginAddress;
 
@@ -114,6 +129,19 @@ export function MobileNavigation() {
       e.preventDefault();
       sessionStorage.setItem('zklogin_return_url', item.href);
       setIsConnectModalOpen(true);
+      return;
+    }
+
+    // For home button: always scroll to top
+    if (item.href === '/') {
+      if (pathname === '/') {
+        // Already on home page - just scroll
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // Set flag to scroll after navigation completes
+        shouldScrollToTop.current = true;
+      }
     }
   };
 

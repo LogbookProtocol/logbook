@@ -237,11 +237,28 @@ function LayoutContent({ children }: { children: ReactNode }) {
         style={{ zIndex: 51, top: bannerHeight }}
       >
         <div className="flex items-center justify-between h-14 px-6 relative pointer-events-none">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-1 text-lg whitespace-nowrap tracking-tight pointer-events-auto">
-            <LogoIcon size={24} />
-            <span className="font-bold bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent">Logbook</span><sup className="text-[0.55em] font-semibold text-blue-500 -ml-0.5">β</sup>
-          </Link>
+          {/* Logo + Hamburger (mobile) */}
+          <div className="flex items-center gap-1 pointer-events-auto">
+            <Link href="/" className="flex items-center gap-1 text-lg whitespace-nowrap tracking-tight">
+              <LogoIcon size={24} />
+              {!showMobileUI && (
+                <><span className="font-bold bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent">Logbook</span><sup className="text-[0.55em] font-semibold text-blue-500 -ml-0.5">β</sup></>
+              )}
+            </Link>
+
+            {/* Hamburger menu button - right after logo on mobile */}
+            {showMobileUI && (
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+                aria-label="Menu"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
+          </div>
 
           {/* Navigation Menu - centered */}
           <nav className="hidden lg:flex items-center gap-1 pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -262,42 +279,41 @@ function LayoutContent({ children }: { children: ReactNode }) {
             >Account</button>
           </nav>
 
-          {/* Mobile: hamburger menu, auth icon, settings */}
+          {/* Mobile: auth icon, theme, settings */}
           {showMobileUI && (
             <div className="flex items-center gap-1 pointer-events-auto">
-              {/* Hamburger menu button */}
-              <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-                aria-label="Menu"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
 
-              {/* Auth icon for mobile */}
+              {/* Auth button for mobile - same style as desktop */}
               {connectedAddress ? (
                 <div className="relative" ref={authMenuRef}>
                   <button
                     onClick={() => setIsAuthMenuOpen(!isAuthMenuOpen)}
-                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition"
                     title={connectedAddress}
                   >
                     {zkLoginData ? (
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                       </svg>
                     ) : currentWallet?.icon ? (
-                      <img src={currentWallet.icon} alt={currentWallet.name} className="w-5 h-5 rounded" />
+                      <img src={currentWallet.icon} alt={currentWallet.name} className="w-4 h-4 rounded" />
                     ) : (
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
                       </svg>
                     )}
+                    <span>{connectedAddress.slice(0, 6)}...{connectedAddress.slice(-4)}</span>
+                    <svg
+                      className={`w-3 h-3 transition-transform duration-200 ${isAuthMenuOpen ? 'rotate-180' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </button>
                   {isAuthMenuOpen && (
                     <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden z-50">
@@ -356,13 +372,9 @@ function LayoutContent({ children }: { children: ReactNode }) {
               ) : (
                 <button
                   onClick={() => setIsConnectModalOpen(true)}
-                  className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-                  aria-label="Log in"
+                  className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition"
                 >
-                  {/* Arrow into door - login icon (arrow pointing right) */}
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
-                  </svg>
+                  Log in
                 </button>
               )}
 
@@ -486,7 +498,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
         >
           <div className="absolute inset-0 bg-black/20 dark:bg-black/40" />
           <div
-            className="absolute right-4 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden"
+            className="absolute left-6 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden"
             style={{ top: bannerHeight + 56 + 4 }}
             onClick={(e) => e.stopPropagation()}
           >

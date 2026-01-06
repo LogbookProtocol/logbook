@@ -166,9 +166,16 @@ export default function StatsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-2">Protocol Statistics</h1>
         <div className="flex items-end justify-between">
-          <p className="text-gray-500 dark:text-gray-400">
-            {isMock ? 'Demo metrics (mock data)' : `All-time statistics from ${networkLabel}`}
-          </p>
+          <div>
+            <p className="text-gray-500 dark:text-gray-400">
+              {isMock ? 'Demo metrics (mock data)' : 'All-time statistics'}
+            </p>
+            {!isMock && (
+              <p className="text-sm text-gray-400 dark:text-gray-500">
+                from {networkLabel}
+              </p>
+            )}
+          </div>
           {!isMock && (
             <LastUpdated
               lastUpdated={lastUpdated}
@@ -237,7 +244,7 @@ export default function StatsPage() {
           {suiPriceData.isFallback ? (
             <span className="text-xs text-amber-600 dark:text-amber-400">(fallback)</span>
           ) : suiPriceData.timestamp && (
-            <span className="text-xs">({formatTimeWithSeconds(suiPriceData.timestamp)})</span>
+            <span className="text-xs">(Updated: {formatTimeWithSeconds(suiPriceData.timestamp)})</span>
           )}
           <button
             onClick={handlePriceRefresh}
@@ -329,6 +336,7 @@ export default function StatsPage() {
           <p className="text-gray-600 dark:text-gray-400 text-sm">
             Statistics are fetched directly from the Sui blockchain ({networkLabel}).
             Data is updated in real-time from the Logbook protocol smart contracts.
+            {' '}<a href="/docs?doc=smart-contract" className="text-cyan-600 dark:text-cyan-400 hover:underline">Read more in documentation →</a>
           </p>
         </section>
       )}
