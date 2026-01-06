@@ -481,12 +481,13 @@ function LayoutContent({ children }: { children: ReactNode }) {
       {/* Mobile Menu Dropdown */}
       {showMobileUI && isMobileMenuOpen && (
         <div
-          className="fixed inset-0 z-50"
+          className="fixed inset-0 z-[52]"
           onClick={() => setIsMobileMenuOpen(false)}
         >
           <div className="absolute inset-0 bg-black/20 dark:bg-black/40" />
           <div
-            className="absolute top-14 right-4 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden"
+            className="absolute right-4 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden"
+            style={{ top: bannerHeight + 56 + 4 }}
             onClick={(e) => e.stopPropagation()}
           >
             <nav className="py-2">

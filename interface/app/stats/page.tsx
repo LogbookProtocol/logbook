@@ -7,6 +7,7 @@ import { fetchProtocolStats, fetchProtocolGasStats, ProtocolStatsBlockchain, Pro
 import { LastUpdated } from '@/components/LastUpdated';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { fetchSuiPriceWithMeta, SuiPriceResult } from '@/lib/sui-gas-price';
+import { formatTimeWithSeconds } from '@/lib/format-date';
 
 function StatCard({ label, value, subtitle, isLoading }: { label: string; value: string; subtitle?: string; isLoading?: boolean }) {
   return (
@@ -236,7 +237,7 @@ export default function StatsPage() {
           {suiPriceData.isFallback ? (
             <span className="text-xs text-amber-600 dark:text-amber-400">(fallback)</span>
           ) : suiPriceData.timestamp && (
-            <span className="text-xs">({suiPriceData.timestamp.toLocaleTimeString()})</span>
+            <span className="text-xs">({formatTimeWithSeconds(suiPriceData.timestamp)})</span>
           )}
           <button
             onClick={handlePriceRefresh}
