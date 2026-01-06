@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useLanguage, Language, LanguageSetting } from '@/contexts/LanguageContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import {
   DateFormat,
@@ -15,13 +15,13 @@ import {
 } from '@/lib/format-date';
 
 // Verified languages: English is always first, others are shuffled
-const englishFirst = { code: 'en', key: 'english' } as const;
-const otherVerifiedLanguages: { code: string; key: string }[] = [
+const englishFirst: { code: Language; key: string } = { code: 'en', key: 'english' };
+const otherVerifiedLanguages: { code: Language; key: string }[] = [
   // Add more verified languages here as they get reviewed
 ];
 
 // AI generated languages (machine translations, not yet reviewed)
-const aiGeneratedLanguages = [
+const aiGeneratedLanguages: { code: Language; key: string }[] = [
   // { code: 'ru', key: 'russian' },
   // { code: 'zh', key: 'chinese' },
   // { code: 'es', key: 'spanish' },
@@ -36,10 +36,10 @@ const aiGeneratedLanguages = [
   // { code: 'it', key: 'italian' },
   // { code: 'tr', key: 'turkish' },
   // { code: 'ca', key: 'catalan' },
-] as const;
+];
 
 // Auto option is always first
-const autoLanguage = { code: 'auto', key: 'auto' } as const;
+const autoLanguage: { code: LanguageSetting; key: string } = { code: 'auto', key: 'auto' };
 
 // Shuffle array using Fisher-Yates algorithm
 function shuffleArray<T>(array: readonly T[]): T[] {

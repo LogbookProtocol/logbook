@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { docsNavigation, docsContent } from '@/lib/mock-docs';
 
@@ -160,7 +160,7 @@ function getAllDocs(): { slug: string; title: string; section: string }[] {
   return docs;
 }
 
-export default function DocsPage() {
+function DocsContent() {
   const searchParams = useSearchParams();
   const docParam = searchParams.get('doc');
 
@@ -467,5 +467,13 @@ export default function DocsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DocsPage() {
+  return (
+    <Suspense fallback={<div className="max-w-6xl mx-auto px-6 py-12">Loading...</div>}>
+      <DocsContent />
+    </Suspense>
   );
 }
