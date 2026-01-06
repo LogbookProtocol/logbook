@@ -22,7 +22,7 @@ import {
 } from '@/lib/format-date';
 import { getDataSource, getSuiscanAccountUrl, getSuiscanTxUrl } from '@/lib/sui-config';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useLanguage, Language, LanguageSetting } from '@/contexts/LanguageContext';
 import { fetchUserAccountStats, getSponsorshipStatus, UserAccountStats, SponsorshipStatus } from '@/lib/sui-service';
 import { useAuth } from '@/contexts/AuthContext';
 import { LastUpdated } from '@/components/LastUpdated';
@@ -493,13 +493,13 @@ function SettingsTab() {
     };
 
     // Verified languages: English is always first, others are shuffled
-    const englishFirst = { code: 'en', key: 'english' } as const;
-    const otherVerifiedLanguages: { code: string; key: string }[] = [
+    const englishFirst: { code: Language; key: string } = { code: 'en', key: 'english' };
+    const otherVerifiedLanguages: { code: Language; key: string }[] = [
       // Add more verified languages here as they get reviewed
     ];
 
     // AI generated languages (machine translations, not yet reviewed)
-    const aiGeneratedLanguages = [
+    const aiGeneratedLanguages: { code: Language; key: string }[] = [
       { code: 'ru', key: 'russian' },
       { code: 'zh', key: 'chinese' },
       { code: 'es', key: 'spanish' },

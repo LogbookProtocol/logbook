@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-type Language = 'en' | 'ru' | 'zh' | 'es' | 'he' | 'uk' | 'be' | 'pt' | 'fr' | 'de' | 'ja' | 'ko' | 'it' | 'tr' | 'ca';
-type LanguageSetting = 'auto' | Language;
+export type Language = 'en' | 'ru' | 'zh' | 'es' | 'he' | 'uk' | 'be' | 'pt' | 'fr' | 'de' | 'ja' | 'ko' | 'it' | 'tr' | 'ca';
+export type LanguageSetting = 'auto' | Language;
 
 interface LanguageContextType {
   language: Language; // The actual resolved language (never 'auto')
