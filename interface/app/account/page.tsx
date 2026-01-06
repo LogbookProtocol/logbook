@@ -589,7 +589,7 @@ function SettingsTab() {
             </div>
           </div>
 
-          {/* AI Generated languages */}
+          {/* AI Generated languages - temporarily hidden
           <div className="p-4 rounded-lg bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
             <div className="flex items-center gap-2 mb-3">
               <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -613,6 +613,7 @@ function SettingsTab() {
               ))}
             </div>
           </div>
+          */}
         </div>
       </section>
 

@@ -317,14 +317,13 @@ export function SettingsMenu() {
                     </button>
                   ))}
 
-                  {/* Divider with label */}
+                  {/* AI Generated languages - temporarily hidden
                   <div className="my-1 flex items-center gap-2 px-3">
                     <div className="flex-1 border-t border-gray-200 dark:border-gray-600" />
                     <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">AI Generated</span>
                     <div className="flex-1 border-t border-gray-200 dark:border-gray-600" />
                   </div>
 
-                  {/* AI Generated languages */}
                   {languageGroups.aiGenerated.map(lang => (
                     <button
                       key={lang.code}
@@ -335,6 +334,7 @@ export function SettingsMenu() {
                       {languageSetting === lang.code && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
                     </button>
                   ))}
+                  */}
                 </div>
               )}
             </div>
