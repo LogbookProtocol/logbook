@@ -636,7 +636,8 @@ function GasCostCalculator({
   return (
     <div className="py-4 px-5 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 mb-6">
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">Gas for</span>
+        <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap hidden sm:inline">Estimated gas cost for</span>
+        <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap sm:hidden">Gas for</span>
         <input
           type="text"
           inputMode="numeric"
@@ -651,16 +652,16 @@ function GasCostCalculator({
         />
         <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">participants:</span>
         {participants > 0 ? (
-          <>
+          <div className="flex flex-col ml-auto text-right">
             <span className="text-base font-bold bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent whitespace-nowrap">
               ~{currencySymbol}{totalCostFiat.toFixed(3)}
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-              (~{totalCostSui.toFixed(4)} SUI)
+              ~{totalCostSui.toFixed(4)} SUI
             </span>
-          </>
+          </div>
         ) : (
-          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+          <span className="text-sm text-gray-400 dark:text-gray-500 ml-auto">—</span>
         )}
       </div>
     </div>
