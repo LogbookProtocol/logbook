@@ -289,11 +289,12 @@ function DocsContent() {
                 </p>
                 <button
                   onClick={copyEmail}
-                  className="flex items-center gap-2 text-xs font-medium text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition-colors"
+                  className={`flex items-center gap-2 text-xs font-medium transition-colors ${emailCopied ? 'text-green-500' : 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300'}`}
+                  title={emailCopied ? 'Copied!' : 'Copy email'}
                 >
                   <span>hello@logbook.zone</span>
                   {emailCopied ? (
-                    <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   ) : (

@@ -22,11 +22,14 @@ function LayoutContent({ children }: { children: ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
+  const [bannerEmailCopied, setBannerEmailCopied] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(80);
+  const [bannerHeight, setBannerHeight] = useState(28);
   const [headerVisible, setHeaderVisible] = useState(false);
   const [shouldAnimateHeader, setShouldAnimateHeader] = useState(false);
   const authMenuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const isInitialLoadRef = useRef(true);
   const router = useRouter();
@@ -100,13 +103,13 @@ function LayoutContent({ children }: { children: ReactNode }) {
     }
   }, [pathname]);
 
-  // Measure header height
+  // Measure header height (including banner)
   useEffect(() => {
     const updateHeaderHeight = () => {
-      if (headerRef.current) {
-        const height = headerRef.current.offsetHeight;
-        setHeaderHeight(height);
-      }
+      const bannerH = bannerRef.current?.offsetHeight || 0;
+      const headerNavHeight = headerRef.current?.offsetHeight || 0;
+      setBannerHeight(bannerH);
+      setHeaderHeight(bannerH + headerNavHeight);
     };
     updateHeaderHeight();
     window.addEventListener('resize', updateHeaderHeight);
@@ -192,13 +195,45 @@ function LayoutContent({ children }: { children: ReactNode }) {
       {/* Global gradient overlay from top */}
       <div className="fixed inset-x-0 top-0 h-[500px] bg-gradient-to-b from-cyan-50/50 via-cyan-50/20 to-transparent dark:from-cyan-950/30 dark:via-cyan-950/10 dark:to-transparent pointer-events-none -z-10" />
 
+      {/* Beta Banner */}
+      <div
+        ref={bannerRef}
+        className={`fixed top-0 left-0 right-0 bg-green-950 text-green-500 text-xs sm:text-sm text-center py-1.5 px-4 ${
+          shouldAnimateHeader ? 'transition-opacity duration-[3000ms] ease-out' : ''
+        } ${headerVisible ? 'opacity-100' : 'opacity-0'}`}
+        style={{ zIndex: 52 }}
+      >
+        <span className="hidden sm:inline">You're testing Logbook Beta on Sui Devnet. All data will be deleted after testing. Found a bug or have questions? Let us know at </span>
+        <span className="sm:hidden">Beta on Sui Devnet. Data will be deleted. Contact: </span>
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText('hello@logbook.zone');
+            setBannerEmailCopied(true);
+            setTimeout(() => setBannerEmailCopied(false), 2000);
+          }}
+          className={`inline-flex items-center gap-1 font-medium transition-colors ${bannerEmailCopied ? 'text-white' : 'underline hover:no-underline'}`}
+          title={bannerEmailCopied ? 'Copied!' : 'Copy email'}
+        >
+          <span>hello@logbook.zone</span>
+          {bannerEmailCopied ? (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          )}
+        </button>
+      </div>
+
       {/* Header */}
       <div
         ref={headerRef}
-        className={`fixed top-0 left-0 right-0 pointer-events-none bg-gray-100/70 dark:bg-gray-900/70 backdrop-blur-sm ${
+        className={`fixed left-0 right-0 pointer-events-none bg-gray-100/70 dark:bg-gray-900/70 backdrop-blur-sm ${
           shouldAnimateHeader ? 'transition-opacity duration-[3000ms] ease-out' : ''
         } ${headerVisible ? 'opacity-100' : 'opacity-0'}`}
-        style={{ zIndex: 51 }}
+        style={{ zIndex: 51, top: bannerHeight }}
       >
         <div className="flex items-center justify-between h-14 px-6 relative pointer-events-none">
           {/* Logo */}
@@ -211,6 +246,8 @@ function LayoutContent({ children }: { children: ReactNode }) {
           <nav className="hidden lg:flex items-center gap-1 pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <Link href="/" className={`px-4 py-2 rounded-lg text-sm font-medium tracking-wider transition ${pathname === '/' ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>Home</Link>
             <Link href="/campaigns" className={`px-4 py-2 rounded-lg text-sm font-medium tracking-wider transition ${pathname.startsWith('/campaigns') ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>Campaigns</Link>
+            <Link href="/stats" className={`px-4 py-2 rounded-lg text-sm font-medium tracking-wider transition ${pathname === '/stats' ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>Stats</Link>
+            <Link href="/docs" className={`px-4 py-2 rounded-lg text-sm font-medium tracking-wider transition ${pathname === '/docs' ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>Docs</Link>
             <button
               onClick={() => {
                 if (connectedAddress) {
@@ -222,8 +259,6 @@ function LayoutContent({ children }: { children: ReactNode }) {
               }}
               className={`px-4 py-2 rounded-lg text-sm font-medium tracking-wider transition cursor-pointer ${pathname === '/account' ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
             >Account</button>
-            <Link href="/stats" className={`px-4 py-2 rounded-lg text-sm font-medium tracking-wider transition ${pathname === '/stats' ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>Stats</Link>
-            <Link href="/docs" className={`px-4 py-2 rounded-lg text-sm font-medium tracking-wider transition ${pathname === '/docs' ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}>Docs</Link>
           </nav>
 
           {/* Mobile: hamburger menu, auth icon, settings */}
@@ -468,27 +503,6 @@ function LayoutContent({ children }: { children: ReactNode }) {
                 </svg>
                 Campaigns
               </Link>
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  if (connectedAddress) {
-                    router.push('/account');
-                  } else {
-                    sessionStorage.setItem('zklogin_return_url', '/account');
-                    setIsConnectModalOpen(true);
-                  }
-                }}
-                className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition w-full text-left ${
-                  pathname === '/account'
-                    ? 'bg-gray-100 dark:bg-gray-700 text-cyan-600 dark:text-cyan-400'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                Account
-              </button>
               <Link
                 href="/stats"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -517,6 +531,27 @@ function LayoutContent({ children }: { children: ReactNode }) {
                 </svg>
                 Docs
               </Link>
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  if (connectedAddress) {
+                    router.push('/account');
+                  } else {
+                    sessionStorage.setItem('zklogin_return_url', '/account');
+                    setIsConnectModalOpen(true);
+                  }
+                }}
+                className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition w-full text-left ${
+                  pathname === '/account'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-cyan-600 dark:text-cyan-400'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Account
+              </button>
 
               {/* Divider */}
               <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
