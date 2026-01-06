@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
@@ -11,6 +11,8 @@ import { DatePicker } from '@/components/ui/DatePicker';
 import { getDataSource } from '@/lib/sui-config';
 import { buildCreateCampaignTx, executeZkLoginSponsoredTransaction, executeZkLoginTransaction, getSponsorshipStatus } from '@/lib/sui-service';
 import { getReferrer } from '@/lib/navigation';
+import { getTransactionCost, fetchSuiPrice } from '@/lib/sui-gas-price';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export default function NewCampaignPage() {
   const router = useRouter();
@@ -33,11 +35,26 @@ export default function NewCampaignPage() {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [, forceUpdate] = useState(0);
   const [backLink, setBackLink] = useState('/campaigns');
+  const [expectedParticipants, setExpectedParticipants] = useState<string>('');
+  const [txCostFiat, setTxCostFiat] = useState<number>(0);
+  const [suiPrice, setSuiPrice] = useState<number>(0);
+  const { currency, currencySymbol } = useCurrency();
 
   // Get referrer on client side
   useEffect(() => {
     setBackLink(getReferrer('/campaigns'));
   }, []);
+
+  // Fetch gas cost and SUI price
+  useEffect(() => {
+    Promise.all([
+      getTransactionCost(currency),
+      fetchSuiPrice(currency),
+    ]).then(([cost, price]) => {
+      setTxCostFiat(cost);
+      setSuiPrice(price);
+    });
+  }, [currency]);
 
   // Re-render when date format changes
   useEffect(() => {
@@ -399,6 +416,15 @@ export default function NewCampaignPage() {
         </button>
       </div>
 
+      {/* Gas Cost Calculator */}
+      <GasCostCalculator
+        expectedParticipants={expectedParticipants}
+        setExpectedParticipants={setExpectedParticipants}
+        txCostFiat={txCostFiat}
+        suiPrice={suiPrice}
+        currencySymbol={currencySymbol}
+      />
+
       {/* Review Button */}
       <button
         onClick={() => setReviewMode(true)}
@@ -577,6 +603,65 @@ function QuestionCard({
             {question.required && ' • Required'}
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Gas Cost Calculator Component
+function GasCostCalculator({
+  expectedParticipants,
+  setExpectedParticipants,
+  txCostFiat,
+  suiPrice,
+  currencySymbol,
+}: {
+  expectedParticipants: string;
+  setExpectedParticipants: (value: string) => void;
+  txCostFiat: number;
+  suiPrice: number;
+  currencySymbol: string;
+}) {
+  const participants = parseInt(expectedParticipants) || 0;
+
+  // Calculate costs: 1 campaign creation + N response transactions
+  const campaignTxCount = 1;
+  const responseTxCount = participants;
+  const totalTxCount = campaignTxCount + responseTxCount;
+
+  const totalCostFiat = totalTxCount * txCostFiat;
+  const costPerTxSui = suiPrice > 0 ? txCostFiat / suiPrice : 0;
+  const totalCostSui = totalTxCount * costPerTxSui;
+
+  return (
+    <div className="py-4 px-5 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 mb-6">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">Gas for</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={expectedParticipants}
+          onChange={(e) => {
+            const val = e.target.value.replace(/\D/g, '');
+            setExpectedParticipants(val);
+          }}
+          className="w-16 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition text-center text-sm"
+          placeholder="100"
+        />
+        <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">participants:</span>
+        {participants > 0 ? (
+          <>
+            <span className="text-base font-bold bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent whitespace-nowrap">
+              ~{currencySymbol}{totalCostFiat.toFixed(3)}
+            </span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+              (~{totalCostSui.toFixed(4)} SUI)
+            </span>
+          </>
+        ) : (
+          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+        )}
       </div>
     </div>
   );
