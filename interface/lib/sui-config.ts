@@ -1,8 +1,8 @@
 // Sui Network Configuration - Logbook
 export const SUI_CONFIG = {
   devnet: {
-    packageId: '0x71f222396cc039caa67acec882be72a1c87b328c8ce140f359dbb6548caa1fe2',
-    registryId: '0x595362674553a8371dcccdcb6ca094e82e5d2fdcc4fd12d9cef4e81221707fcd',
+    packageId: '0x864dc36953c2fc645fb66a4d7827cc5562e9d982cc077ec3dc1073bbd9bc577d',
+    registryId: '0x2a14c51ea75512e3e297ff3463f58b8ab9b3b68f0d7927dacbab6635de372249',
     rpcUrl: 'https://fullnode.devnet.sui.io:443',
     network: 'devnet' as const,
   },

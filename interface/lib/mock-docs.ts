@@ -757,12 +757,74 @@ Enables gasless transactions for new users.
     title: 'Smart Contract',
     content: `# Smart Contract
 
-The Logbook protocol is implemented as a Move module on Sui.
+The Logbook protocol is implemented as a Move module — a smart contract written in the Move programming language — on the Sui blockchain.
+
+## What is a Smart Contract?
+
+A smart contract is a program that runs on the blockchain. Unlike traditional software that runs on a company's servers, smart contracts:
+
+- **Execute automatically**: Once deployed, the code runs exactly as written — no one can change the rules
+- **Are transparent**: Anyone can read the code and verify what it does
+- **Are trustless**: You don't need to trust the developer — you can verify the logic yourself
+- **Are permanent**: Once deployed, the contract exists as long as the blockchain exists
+
+Think of it as a vending machine: you put in money, select an item, and the machine gives you exactly what you selected. No human intervention, no exceptions, no "special cases". The rules are the rules.
+
+## Why Sui is Different
+
+Most blockchains (Ethereum, Solana, etc.) have significant limitations:
+
+### Traditional Blockchains
+- **Limited data storage**: Storing data is extremely expensive, so most apps store minimal on-chain data
+- **Simple logic only**: Complex programs are costly and slow to execute
+- **Account-based model**: Data is tied to accounts, making it hard to work with individual objects
+
+### Sui's Advantages
+
+Sui was designed from the ground up to solve these problems:
+
+**1. Object-Centric Model**
+Every piece of data is an "object" with its own ID. In Logbook:
+- Each campaign is an object
+- Each response is stored within the campaign object
+- You can reference any specific piece of data by its ID
+
+**2. Cheap Storage**
+Sui's storage model makes it economically viable to store real data on-chain. That's why Logbook can store:
+- Full question text
+- All answer options
+- Every individual response
+- Complete vote counts
+
+On Ethereum, this would cost hundreds or thousands of dollars. On Sui, it costs fractions of a cent.
+
+**3. Move Language**
+Sui uses Move, a language designed specifically for blockchain with:
+- Built-in safety guarantees (no reentrancy attacks, no overflow bugs)
+- Resource-oriented programming (assets can't be accidentally destroyed or duplicated)
+- Clear ownership model (every object has exactly one owner)
+
+**4. Programmable Transactions**
+Sui allows complex multi-step transactions that execute atomically. This means:
+- Campaign creation and question setup happen in one transaction
+- Response submission and vote counting happen together
+- Either everything succeeds, or nothing changes
+
+**5. Sponsored Transactions**
+Sui natively supports paying gas fees on behalf of users. This is how Logbook offers free transactions — it's built into the blockchain protocol.
+
+## What This Means for Logbook
+
+Because of Sui's unique features, Logbook can:
+- Store every response permanently on-chain (not just a hash)
+- Execute voting logic in the smart contract itself
+- Let anyone verify results by reading the blockchain directly
+- Offer a web2-like experience (Google login, free transactions) with web3 guarantees
 
 ## Contract Address
 
 **Devnet Package ID**:
-0x71f222396cc039caa67acec882be72a1c87b328c8ce140f359dbb6548caa1fe2
+0x864dc36953c2fc645fb66a4d7827cc5562e9d982cc077ec3dc1073bbd9bc577d
 
 ## Core Objects
 

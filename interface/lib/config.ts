@@ -1,6 +1,6 @@
 export const NETWORK = 'devnet';
 
-export const PACKAGE_ID = '0x71f222396cc039caa67acec882be72a1c87b328c8ce140f359dbb6548caa1fe2';
+export const PACKAGE_ID = '0x864dc36953c2fc645fb66a4d7827cc5562e9d982cc077ec3dc1073bbd9bc577d';
 
 export const RPC_URL = 'https://fullnode.devnet.sui.io:443';
 

@@ -1,8 +1,10 @@
 'use client';
 
+import { ReactNode } from 'react';
+
 interface FeatureCardProps {
   title: string;
-  description: string;
+  description: ReactNode;
 }
 
 function FeatureCard({ title, description }: FeatureCardProps) {
@@ -25,7 +27,7 @@ export function SolutionSection() {
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-6">
-            Don't trust. Verify.
+            Logbook requires no trust
           </h2>
           <p className="text-base md:text-lg text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
             Truth isn't what someone tells you — it's what you can verify yourself.
@@ -37,11 +39,11 @@ export function SolutionSection() {
         <div className="grid md:grid-cols-3 gap-6 mb-10">
           <FeatureCard
             title="Rules = Code"
-            description="Voting logic in smart contract. No platform can change the rules mid-vote."
+            description={<>Voting logic in <a href="/docs?doc=smart-contract" className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-0.5">smart contract<svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg></a>. No platform can change the rules mid-vote.</>}
           />
           <FeatureCard
             title="Results = Blockchain State"
-            description="Every response has a transaction hash. Count yourself on Sui Explorer — don't trust our UI."
+            description={<>Every response has a transaction hash. Count yourself on <a href="https://suiscan.xyz" target="_blank" rel="noopener noreferrer" className="text-cyan-600 dark:text-cyan-400 hover:underline">Sui Explorer<sup className="text-[0.7em] ml-0.5">↗</sup></a> — don't trust our UI.</>}
           />
           <FeatureCard
             title="History = Permanent"

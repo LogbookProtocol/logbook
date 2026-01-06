@@ -677,3 +677,107 @@ html {
 .dark .docs-example-box .list-content {
   color: #cbd5e1;
 }
+
+/* ========================================
+   Documentation Mobile Styles
+   ======================================== */
+
+@media (max-width: 640px) {
+  /* Main title */
+  .docs-h1 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* Section headings */
+  .docs-h2 {
+    font-size: 1.25rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+  }
+
+  /* Subsection headings */
+  .docs-h3 {
+    font-size: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  /* Hide anchor links on mobile (no hover) */
+  .anchor-link {
+    display: none;
+  }
+
+  /* Paragraphs */
+  .docs-p {
+    font-size: 0.9375rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Lists */
+  .docs-ul,
+  .docs-ol {
+    margin: 1rem 0;
+  }
+
+  .docs-li {
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .docs-li .list-content {
+    font-size: 0.9375rem;
+  }
+
+  /* Inline code */
+  .inline-code {
+    font-size: 0.8125em;
+    padding: 0.15em 0.3em;
+  }
+
+  /* Code blocks */
+  .code-block-wrapper {
+    margin: 1rem 0;
+    border-radius: 0.5rem;
+  }
+
+  .code-block {
+    padding: 1rem;
+    font-size: 0.8125rem;
+  }
+
+  .code-block-lang {
+    font-size: 0.625rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* Tables */
+  .table-wrapper {
+    margin: 1rem 0;
+    border-radius: 0.5rem;
+  }
+
+  .docs-table {
+    font-size: 0.8125rem;
+  }
+
+  .docs-table th,
+  .docs-table td {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .docs-table th {
+    font-size: 0.6875rem;
+  }
+
+  /* Example boxes */
+  .docs-example-box {
+    margin: 1rem 0;
+    border-radius: 0.5rem;
+    padding: 1rem;
+  }
+
+  .docs-example-label {
+    font-size: 0.625rem;
+  }
+}

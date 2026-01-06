@@ -907,3 +907,110 @@ export async function getSponsorshipStatus(address: string): Promise<Sponsorship
     return null;
   }
 }
+
+// User account statistics from blockchain
+export interface UserAccountStats {
+  campaignsCreated: number;
+  campaignsParticipated: number;
+  totalResponsesReceived: number; // total responses on user's campaigns
+  firstActivityDate: string | null; // ISO date of first campaign/response
+}
+
+// Fetch user account statistics from blockchain
+export async function fetchUserAccountStats(userAddress: string): Promise<UserAccountStats> {
+  const client = createSuiClient();
+  const config = getSuiConfig();
+  if (!client || !config || !userAddress) {
+    return { campaignsCreated: 0, campaignsParticipated: 0, totalResponsesReceived: 0, firstActivityDate: null };
+  }
+
+  try {
+    // Get registry object
+    const registry = await client.getObject({
+      id: config.registryId,
+      options: { showContent: true },
+    });
+
+    if (!registry.data?.content || registry.data.content.dataType !== 'moveObject') {
+      return { campaignsCreated: 0, campaignsParticipated: 0, totalResponsesReceived: 0, firstActivityDate: null };
+    }
+
+    const registryData = registry.data.content.fields as {
+      all_campaigns: Array<string | { id: string }>;
+      campaigns_by_creator: { fields: { contents: Array<{ fields: { key: string; value: Array<string | { id: string }> } }> } };
+    };
+
+    // Count campaigns created by this user
+    const creatorEntry = registryData.campaigns_by_creator?.fields?.contents?.find(
+      (entry) => entry.fields.key === userAddress
+    );
+    const campaignsCreated = creatorEntry?.fields.value.length || 0;
+
+    // Get all campaigns to count participations and responses
+    if (!registryData.all_campaigns || registryData.all_campaigns.length === 0) {
+      return { campaignsCreated, campaignsParticipated: 0, totalResponsesReceived: 0, firstActivityDate: null };
+    }
+
+    const campaignIds = registryData.all_campaigns.map(c =>
+      typeof c === 'string' ? c : c.id
+    );
+
+    // Fetch all campaign objects
+    const campaigns = await client.multiGetObjects({
+      ids: campaignIds,
+      options: { showContent: true },
+    });
+
+    let campaignsParticipated = 0;
+    let totalResponsesReceived = 0;
+    let earliestTimestamp: number | null = null;
+
+    for (const obj of campaigns) {
+      if (!obj.data?.content || obj.data.content.dataType !== 'moveObject') continue;
+
+      const content = obj.data.content as unknown as {
+        fields: {
+          creator: string;
+          total_responses: string;
+          created_at: string;
+          participants: { fields: { contents: Array<{ fields: { key: string } }> } };
+          responses: Array<{ fields: { respondent: string; timestamp: string } }>;
+        };
+      };
+
+      // Check if user is creator - add responses received
+      if (content.fields.creator === userAddress) {
+        totalResponsesReceived += parseInt(content.fields.total_responses || '0');
+        const createdAt = parseInt(content.fields.created_at || '0');
+        if (createdAt > 0 && (earliestTimestamp === null || createdAt < earliestTimestamp)) {
+          earliestTimestamp = createdAt;
+        }
+      }
+
+      // Check if user has participated
+      const participants = content.fields.participants?.fields?.contents || [];
+      const isParticipant = participants.some(p => p.fields.key === userAddress);
+      if (isParticipant) {
+        campaignsParticipated++;
+        // Get response timestamp for first activity
+        const userResponse = content.fields.responses?.find(r => r.fields.respondent === userAddress);
+        if (userResponse) {
+          const respTimestamp = parseInt(userResponse.fields.timestamp || '0');
+          if (respTimestamp > 0 && (earliestTimestamp === null || respTimestamp < earliestTimestamp)) {
+            earliestTimestamp = respTimestamp;
+          }
+        }
+      }
+    }
+
+    return {
+      campaignsCreated,
+      campaignsParticipated,
+      totalResponsesReceived,
+      firstActivityDate: earliestTimestamp ? new Date(earliestTimestamp).toISOString() : null,
+    };
+  } catch (error) {
+    console.error('Error fetching user account stats:', error);
+    return { campaignsCreated: 0, campaignsParticipated: 0, totalResponsesReceived: 0, firstActivityDate: null };
+  }
+}

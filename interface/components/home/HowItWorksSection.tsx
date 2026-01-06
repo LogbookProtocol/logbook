@@ -106,7 +106,7 @@ export function HowItWorksSection() {
               !isConnected ? (
                 <button
                   onClick={handleSignIn}
-                  className="px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-xs font-medium hover:border-cyan-500 hover:text-cyan-600 dark:hover:border-cyan-500 dark:hover:text-cyan-400 transition"
+                  className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-medium hover:opacity-90 transition shadow-md shadow-cyan-500/20"
                 >
                   Sign in
                 </button>
@@ -135,7 +135,7 @@ export function HowItWorksSection() {
             button={
               <button
                 onClick={handleCreateCampaign}
-                className="px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-xs font-medium hover:border-cyan-500 hover:text-cyan-600 dark:hover:border-cyan-500 dark:hover:text-cyan-400 transition"
+                className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-medium hover:opacity-90 transition shadow-md shadow-cyan-500/20"
               >
                 New Campaign
               </button>

@@ -2,7 +2,7 @@
 
 export const runtime = 'edge';
 
-import { useState, useEffect, Suspense, use } from 'react';
+import { useState, useEffect, Suspense, use, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import Link from 'next/link';
@@ -19,6 +19,8 @@ import { getDataSource, getSuiscanObjectUrl, getSuiscanTxUrl, getSuiscanAccountU
 import { fetchCampaignById, fetchCampaignResults, fetchCampaignResponses, checkUserParticipation, CampaignResponseData } from '@/lib/sui-service';
 import { useAuth } from '@/contexts/AuthContext';
 import { getReferrer, saveReferrer } from '@/lib/navigation';
+import { useCopyLink } from '@/hooks/useCopyLink';
+import { LastUpdated } from '@/components/LastUpdated';
 
 type TabType = 'overview' | 'results' | 'responses';
 
@@ -33,10 +35,10 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'overview');
   const [, forceUpdate] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const [showQR, setShowQR] = useState(false);
+  const [copiedQR, setCopiedQR] = useState(false);
   const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
   const [backLink, setBackLink] = useState('/campaigns');
+  const { copyLink, isCopied } = useCopyLink();
 
   // Load zkLogin address and referrer from localStorage/sessionStorage
   useEffect(() => {
@@ -54,7 +56,9 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   const [blockchainResponses, setBlockchainResponses] = useState<CampaignResponseData[]>([]);
   const [hasParticipatedState, setHasParticipatedState] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Sync tab with URL param when navigating between campaigns
   useEffect(() => {
@@ -68,38 +72,59 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     return () => window.removeEventListener('date-format-changed', handleDateFormatChange);
   }, []);
 
+  // Fetch campaign data from blockchain
+  const fetchData = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
+    try {
+      const [campaignData, resultsData, responsesData] = await Promise.all([
+        fetchCampaignById(id),
+        fetchCampaignResults(id),
+        fetchCampaignResponses(id),
+      ]);
+      setBlockchainCampaign(campaignData);
+      setBlockchainResults(resultsData);
+      setBlockchainResponses(responsesData);
+      setLastUpdated(new Date());
+
+      // Check if user has participated (if connected)
+      if (connectedAddress) {
+        const hasParticipated = await checkUserParticipation(id, connectedAddress);
+        setHasParticipatedState(hasParticipated);
+      }
+    } catch (error) {
+      console.error('Failed to fetch campaign:', error);
+    } finally {
+      if (showLoading) setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [id, connectedAddress]);
+
+  const handleManualRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    fetchData(false);
+  }, [fetchData]);
+
   // Load data from blockchain if needed
   useEffect(() => {
     const source = getDataSource();
     setDataSourceState(source);
 
     if (source !== 'mock') {
-      setIsLoading(true);
-      const fetchData = async () => {
-        try {
-          const [campaignData, resultsData, responsesData] = await Promise.all([
-            fetchCampaignById(id),
-            fetchCampaignResults(id),
-            fetchCampaignResponses(id),
-          ]);
-          setBlockchainCampaign(campaignData);
-          setBlockchainResults(resultsData);
-          setBlockchainResponses(responsesData);
-
-          // Check if user has participated (if connected)
-          if (connectedAddress) {
-            const hasParticipated = await checkUserParticipation(id, connectedAddress);
-            setHasParticipatedState(hasParticipated);
-          }
-        } catch (error) {
-          console.error('Failed to fetch campaign:', error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchData();
+      // Initial fetch with loading state
+      fetchData(true);
     }
-  }, [id, connectedAddress]);
+  }, [fetchData]);
+
+  // Set up polling only for active campaigns
+  useEffect(() => {
+    if (dataSource === 'mock') return;
+    if (!blockchainCampaign || blockchainCampaign.status !== 'active') return;
+
+    // Poll every 5 seconds without loading state
+    const interval = setInterval(() => fetchData(false), 5000);
+
+    return () => clearInterval(interval);
+  }, [dataSource, blockchainCampaign, fetchData]);
 
   // Get campaign - from blockchain or mock data
   const campaign = dataSource !== 'mock' ? blockchainCampaign : getCampaignById(id);
@@ -180,6 +205,31 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
               >
                 {statusInfo.label}
               </span>
+              <button
+                onClick={() => copyLink(campaign.id)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm transition ${
+                  isCopied(campaign.id)
+                    ? 'bg-green-500/20 text-green-600 dark:text-green-400'
+                    : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10'
+                }`}
+                title={isCopied(campaign.id) ? 'Copied!' : 'Copy link'}
+              >
+                {isCopied(campaign.id) ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    <span>Copy link</span>
+                  </>
+                )}
+              </button>
             </div>
 
             <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
@@ -214,20 +264,31 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-8 border-b border-gray-200 dark:border-white/[0.06]">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
-              activeTab === tab.id
-                ? 'text-gray-900 dark:text-white border-cyan-500'
-                : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-end justify-between mb-8 border-b border-gray-200 dark:border-white/[0.06]">
+        <div className="flex gap-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? 'text-gray-900 dark:text-white border-cyan-500'
+                  : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {dataSource !== 'mock' && campaign.status === 'active' && (
+          <div className="pb-3">
+            <LastUpdated
+              lastUpdated={lastUpdated}
+              onRefresh={handleManualRefresh}
+              isLoading={isRefreshing}
+            />
+          </div>
+        )}
       </div>
 
       {/* Overview Tab */}
@@ -299,45 +360,104 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
           {isCreator && (
             <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Share Campaign</h2>
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  readOnly
-                  value={`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/campaigns/${campaign.id}`}
-                  className="flex-1 px-4 py-3 rounded-lg bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] text-gray-600 dark:text-gray-400"
-                />
+              {/* Hidden QR for canvas operations */}
+              <img
+                id="campaign-qr-code"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/campaigns/${campaign.id}`)}`}
+                alt="Campaign QR Code"
+                className="hidden"
+                crossOrigin="anonymous"
+              />
+              <div className="flex flex-wrap gap-3">
+                {/* Copy Link */}
                 <button
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(`${window.location.origin}/campaigns/${campaign.id}`);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  }}
-                  className="px-4 py-3 rounded-lg bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/20 transition"
-                >
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
-                <button
-                  onClick={() => setShowQR(!showQR)}
-                  className={`px-4 py-3 rounded-lg transition ${
-                    showQR
-                      ? 'bg-cyan-500 text-white'
+                  onClick={() => copyLink(campaign.id)}
+                  className={`px-4 py-2 rounded-lg transition text-sm font-medium flex items-center gap-2 ${
+                    isCopied(campaign.id)
+                      ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
                       : 'bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/20'
                   }`}
                 >
-                  QR
+                  {isCopied(campaign.id) ? (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                  )}
+                  {isCopied(campaign.id) ? 'Copied!' : 'Copy Link'}
+                </button>
+                {/* Copy QR */}
+                <button
+                  onClick={async () => {
+                    const img = document.getElementById('campaign-qr-code') as HTMLImageElement;
+                    if (!img) return;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 200;
+                    canvas.height = 200;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    ctx.drawImage(img, 0, 0, 200, 200);
+                    canvas.toBlob(async (blob) => {
+                      if (!blob) return;
+                      try {
+                        await navigator.clipboard.write([
+                          new ClipboardItem({ 'image/png': blob })
+                        ]);
+                        setCopiedQR(true);
+                        setTimeout(() => setCopiedQR(false), 2000);
+                      } catch {
+                        // Fallback: download instead
+                        const link = document.createElement('a');
+                        link.download = `logbook-qr-${campaign.id.slice(0, 8)}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                      }
+                    }, 'image/png');
+                  }}
+                  className={`px-4 py-2 rounded-lg transition text-sm font-medium flex items-center gap-2 ${
+                    copiedQR
+                      ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
+                      : 'bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/20'
+                  }`}
+                >
+                  {copiedQR ? (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                    </svg>
+                  )}
+                  {copiedQR ? 'Copied!' : 'Copy QR'}
+                </button>
+                {/* Download QR */}
+                <button
+                  onClick={() => {
+                    const img = document.getElementById('campaign-qr-code') as HTMLImageElement;
+                    if (!img) return;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 200;
+                    canvas.height = 200;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    ctx.drawImage(img, 0, 0, 200, 200);
+                    const link = document.createElement('a');
+                    link.download = `logbook-qr-${campaign.id.slice(0, 8)}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                  }}
+                  className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/20 transition text-sm font-medium flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download QR
                 </button>
               </div>
-              {showQR && (
-                <div className="mt-4 flex justify-center">
-                  <div className="p-4 bg-white rounded-xl">
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/campaigns/${campaign.id}`)}`}
-                      alt="Campaign QR Code"
-                      className="w-48 h-48"
-                    />
-                  </div>
-                </div>
-              )}
             </section>
           )}
 
@@ -445,14 +565,14 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                       <table className="w-full">
                         <thead className="bg-gray-50 dark:bg-white/[0.02]">
                           <tr>
-                            <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 w-36">
+                            <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 w-28">
                               Respondent
                             </th>
                             <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400">
                               Answer
                             </th>
-                            <th className="text-right px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 w-16">
-                              TX
+                            <th className="text-right px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                              Transaction Block
                             </th>
                           </tr>
                         </thead>
@@ -544,12 +664,12 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-white/[0.02]">
                   <tr>
-                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">
+                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4">
                       Respondent
                     </th>
-                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Time</th>
-                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400">Answers</th>
-                    <th className="text-right px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-16">TX</th>
+                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4">Time</th>
+                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4">Answers</th>
+                    <th className="text-right px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4">Transaction Block</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-white/[0.06]">

@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useCurrentAccount, useDisconnectWallet } from '@mysten/dapp-kit';
 import { ConnectOptionsModal } from '@/components/ConnectOptionsModal';
 
 interface AuthContextType {
@@ -10,12 +10,14 @@ interface AuthContextType {
   openLoginModal: (returnUrl?: string) => void;
   closeLoginModal: () => void;
   requireAuth: (returnUrl?: string) => boolean;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const account = useCurrentAccount();
+  const { mutate: disconnectWallet } = useDisconnectWallet();
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
 
@@ -53,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const closeLoginModal = useCallback(() => {
     setIsLoginModalOpen(false);
+    // Clear return URL when user dismisses the login modal
+    sessionStorage.removeItem('zklogin_return_url');
   }, []);
 
   // Returns true if user is connected, false if not (and opens login modal)
@@ -64,6 +68,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   }, [isConnected, openLoginModal]);
 
+  // Logout - clear zkLogin data and disconnect wallet
+  const logout = useCallback(() => {
+    // Clear all zkLogin data from localStorage
+    localStorage.removeItem('zklogin_address');
+    localStorage.removeItem('zklogin_email');
+    localStorage.removeItem('zklogin_ephemeral_keypair');
+    localStorage.removeItem('zklogin_jwt');
+    localStorage.removeItem('zklogin_salt');
+    localStorage.removeItem('zklogin_proof');
+    localStorage.removeItem('zklogin_max_epoch');
+
+    // Disconnect wallet if connected
+    if (account) {
+      disconnectWallet();
+    }
+
+    // Update state
+    setZkLoginAddress(null);
+
+    // Dispatch event for other components
+    window.dispatchEvent(new CustomEvent('zklogin-changed'));
+  }, [account, disconnectWallet]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -72,12 +99,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         openLoginModal,
         closeLoginModal,
         requireAuth,
+        logout,
       }}
     >
       {children}
       <ConnectOptionsModal
         open={isLoginModalOpen}
-        onOpenChange={setIsLoginModalOpen}
+        onOpenChange={(open) => {
+          setIsLoginModalOpen(open);
+          // Clear return URL when modal is closed (user cancelled login)
+          if (!open) {
+            sessionStorage.removeItem('zklogin_return_url');
+          }
+        }}
       />
     </AuthContext.Provider>
   );

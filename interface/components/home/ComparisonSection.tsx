@@ -51,7 +51,7 @@ export function ComparisonSection() {
     {
       category: 'Who controls the truth?',
       traditional: 'The platform (Google, Telegram, etc)',
-      logbook: 'The blockchain (Sui network)',
+      logbook: <>The blockchain (Sui network). <a href="/docs?doc=why-sui" className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-0.5">Learn more<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg></a></>,
     },
     {
       category: 'Trust model',
@@ -81,12 +81,12 @@ export function ComparisonSection() {
     {
       category: 'Ease of use',
       traditional: '✅ Instant, familiar - Just create account',
-      logbook: <>✅ Google sign-in - No wallet needed (zkLogin) <svg className="inline-block w-4 h-4 text-cyan-500 ml-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" /></svg></>,
+      logbook: <>✅ Google sign-in - No wallet needed (zkLogin). <a href="/docs?doc=authentication" className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-0.5">Learn more<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg></a></>,
     },
     {
       category: 'Cost',
       traditional: '✅ Free',
-      logbook: '✅ Free beta (first 2 campaigns and 10 responses free)',
+      logbook: <>✅ Free beta (first 2 campaigns and 10 responses free). <a href="/docs?doc=free-tier" className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-0.5">Learn more<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg></a></>,
     },
   ];
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { protocolStats } from '@/lib/mock-stats';
 import { getDataSource } from '@/lib/sui-config';
 import { fetchProtocolStats, ProtocolStatsBlockchain } from '@/lib/sui-service';
+import { LastUpdated } from '@/components/LastUpdated';
 
 function StatCard({ label, value, isLoading }: { label: string; value: string; isLoading?: boolean }) {
   return (
@@ -24,24 +25,45 @@ export default function StatsPage() {
   const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
   const [blockchainStats, setBlockchainStats] = useState<ProtocolStatsBlockchain | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const fetchStats = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
+    setError(null);
+    try {
+      const stats = await fetchProtocolStats();
+      setBlockchainStats(stats);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error('Failed to fetch stats:', err);
+      setError('Failed to connect to blockchain. Please try again later.');
+    } finally {
+      if (showLoading) setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  const handleManualRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    fetchStats(false);
+  }, [fetchStats]);
 
   useEffect(() => {
     const source = getDataSource();
     setDataSourceState(source);
 
-    if (source !== 'mock') {
-      setIsLoading(true);
-      setError(null);
-      fetchProtocolStats()
-        .then(stats => setBlockchainStats(stats))
-        .catch(err => {
-          console.error('Failed to fetch stats:', err);
-          setError('Failed to connect to blockchain. Please try again later.');
-        })
-        .finally(() => setIsLoading(false));
-    }
-  }, []);
+    if (source === 'mock') return;
+
+    // Initial fetch with loading state
+    fetchStats(true);
+
+    // Poll every 5 seconds without loading state
+    const interval = setInterval(() => fetchStats(false), 5000);
+
+    return () => clearInterval(interval);
+  }, [fetchStats]);
 
   // Use blockchain stats or mock data
   const isMock = dataSource === 'mock';
@@ -74,9 +96,18 @@ export default function StatsPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-2">Protocol Statistics</h1>
-        <p className="text-gray-500 dark:text-gray-400">
-          {isMock ? 'Demo metrics (mock data)' : `Live metrics from ${networkLabel}`}
-        </p>
+        <div className="flex items-end justify-between">
+          <p className="text-gray-500 dark:text-gray-400">
+            {isMock ? 'Demo metrics (mock data)' : `Live metrics from ${networkLabel}`}
+          </p>
+          {!isMock && (
+            <LastUpdated
+              lastUpdated={lastUpdated}
+              onRefresh={handleManualRefresh}
+              isLoading={isRefreshing}
+            />
+          )}
+        </div>
       </div>
 
       {/* Error message */}

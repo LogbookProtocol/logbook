@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { docsNavigation, docsContent } from '@/lib/mock-docs';
 
 // Icons for sections
@@ -160,9 +161,19 @@ function getAllDocs(): { slug: string; title: string; section: string }[] {
 }
 
 export default function DocsPage() {
+  const searchParams = useSearchParams();
+  const docParam = searchParams.get('doc');
+
   const [activeSlug, setActiveSlug] = useState('introduction');
   const [activeHeading, setActiveHeading] = useState('');
   const [emailCopied, setEmailCopied] = useState(false);
+
+  // Read doc param from URL on mount
+  useEffect(() => {
+    if (docParam && docsContent[docParam]) {
+      setActiveSlug(docParam);
+    }
+  }, [docParam]);
 
   const copyEmail = () => {
     navigator.clipboard.writeText('hello@logbook.zone');
@@ -203,27 +214,27 @@ export default function DocsPage() {
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen overflow-x-hidden">
       {/* Hero header */}
       <div className="border-b border-gray-200 dark:border-white/[0.06]">
-        <div className="max-w-6xl mx-auto px-6 py-12">
-          <div className="flex items-center gap-3 text-cyan-600 dark:text-cyan-400 mb-4">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+          <div className="flex items-center gap-2 sm:gap-3 text-cyan-600 dark:text-cyan-400 mb-3 sm:mb-4">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
-            <span className="text-sm font-medium tracking-wide uppercase">Documentation</span>
+            <span className="text-xs sm:text-sm font-medium tracking-wide uppercase">Documentation</span>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-3">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-2 sm:mb-3">
             Learn Logbook
           </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl">
+          <p className="text-sm sm:text-base md:text-lg text-gray-600 dark:text-gray-400 max-w-2xl">
             Everything you need to create blockchain-verified surveys, understand the technology, and get the most out of Logbook.
           </p>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex gap-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
 
           {/* Left Sidebar - Navigation */}
           <aside className="w-64 flex-shrink-0 hidden lg:block">
@@ -317,15 +328,15 @@ export default function DocsPage() {
           {/* Main Content */}
           <main className="flex-1 min-w-0 max-w-3xl">
             {/* Breadcrumb & meta */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                <span>Docs</span>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-4 sm:mb-6">
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400 min-w-0">
+                <span className="flex-shrink-0">Docs</span>
+                <svg className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-                <span className="text-gray-900 dark:text-white">{activeDoc.title}</span>
+                <span className="text-gray-900 dark:text-white truncate">{activeDoc.title}</span>
               </div>
-              <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
+              <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
                 <span className="flex items-center gap-1">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -344,14 +355,14 @@ export default function DocsPage() {
             </article>
 
             {/* Navigation */}
-            <div className="flex justify-between mt-8 pt-8 border-t border-gray-200 dark:border-white/[0.06]">
+            <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-4 mt-6 sm:mt-8 pt-6 sm:pt-8 border-t border-gray-200 dark:border-white/[0.06]">
               {prevDoc ? (
                 <button
                   onClick={() => {
                     setActiveSlug(prevDoc.slug);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="group flex flex-col items-start gap-1 p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.02] transition max-w-[45%]"
+                  className="group flex flex-col items-start gap-1 p-3 sm:p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.02] transition sm:max-w-[45%] border border-gray-100 dark:border-white/[0.04] sm:border-transparent"
                 >
                   <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
                     <svg className="w-3 h-3 transform group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -363,7 +374,7 @@ export default function DocsPage() {
                     {prevDoc.title}
                   </span>
                 </button>
-              ) : <div />}
+              ) : <div className="hidden sm:block" />}
 
               {nextDoc ? (
                 <button
@@ -371,7 +382,7 @@ export default function DocsPage() {
                     setActiveSlug(nextDoc.slug);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="group flex flex-col items-end gap-1 p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.02] transition max-w-[45%]"
+                  className="group flex flex-col items-end gap-1 p-3 sm:p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.02] transition sm:max-w-[45%] border border-gray-100 dark:border-white/[0.04] sm:border-transparent sm:ml-auto"
                 >
                   <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
                     Next
@@ -383,7 +394,7 @@ export default function DocsPage() {
                     {nextDoc.title}
                   </span>
                 </button>
-              ) : <div />}
+              ) : <div className="hidden sm:block" />}
             </div>
           </main>
 

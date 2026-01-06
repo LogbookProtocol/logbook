@@ -13,19 +13,59 @@ import {
   setTimeFormat,
   getTimeFormatOptions,
 } from '@/lib/format-date';
-import {
-  DataSource,
-  getDataSource,
-  setDataSource,
-} from '@/lib/sui-config';
+
+// Verified languages: English is always first, others are shuffled
+const englishFirst = { code: 'en', key: 'english' } as const;
+const otherVerifiedLanguages: { code: string; key: string }[] = [
+  // Add more verified languages here as they get reviewed
+];
+
+// AI generated languages (machine translations, not yet reviewed)
+const aiGeneratedLanguages = [
+  { code: 'ru', key: 'russian' },
+  { code: 'zh', key: 'chinese' },
+  { code: 'es', key: 'spanish' },
+  { code: 'he', key: 'hebrew' },
+  { code: 'uk', key: 'ukrainian' },
+  { code: 'be', key: 'belarusian' },
+  { code: 'pt', key: 'portuguese' },
+  { code: 'fr', key: 'french' },
+  { code: 'de', key: 'german' },
+  { code: 'ja', key: 'japanese' },
+  { code: 'ko', key: 'korean' },
+  { code: 'it', key: 'italian' },
+  { code: 'tr', key: 'turkish' },
+  { code: 'ca', key: 'catalan' },
+] as const;
+
+// Auto option is always first
+const autoLanguage = { code: 'auto', key: 'auto' } as const;
+
+// Shuffle array using Fisher-Yates algorithm
+function shuffleArray<T>(array: readonly T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
 
 export function SettingsMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showLanguages, setShowLanguages] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { language, setLanguage, t } = useLanguage();
+  const { languageSetting, setLanguage, t } = useLanguage();
   const { themeMode, setThemeMode } = useTheme();
+
+  // Shuffled languages - computed once on component mount
+  // Structure: { auto, verified (English first, rest shuffled), aiGenerated (shuffled) }
+  const [languageGroups] = useState(() => ({
+    auto: autoLanguage,
+    verified: [englishFirst, ...shuffleArray(otherVerifiedLanguages)],
+    aiGenerated: shuffleArray(aiGeneratedLanguages),
+  }));
 
   // Date format settings
   const [dateFormat, setDateFormatState] = useState<DateFormat>('auto');
@@ -37,14 +77,9 @@ export function SettingsMenu() {
   const [showTimeFormats, setShowTimeFormats] = useState(false);
   const timeFormatOptions = getTimeFormatOptions();
 
-  // Data source settings
-  const [dataSource, setDataSourceState] = useState<DataSource>('mock');
-  const [showDataSources, setShowDataSources] = useState(false);
-
   useEffect(() => {
     setDateFormatState(getDateFormat());
     setTimeFormatState(getTimeFormat());
-    setDataSourceState(getDataSource());
   }, []);
 
   // Close main menu when clicking outside
@@ -71,10 +106,9 @@ export function SettingsMenu() {
       setShowLanguages(false);
       setShowDateFormats(false);
       setShowTimeFormats(false);
-      setShowDataSources(false);
     }
 
-    const anySubmenuOpen = showThemes || showLanguages || showDateFormats || showTimeFormats || showDataSources;
+    const anySubmenuOpen = showThemes || showLanguages || showDateFormats || showTimeFormats;
     if (anySubmenuOpen) {
       // Use setTimeout to let the current click event complete first
       // This allows the option selection to happen before closing
@@ -86,7 +120,7 @@ export function SettingsMenu() {
         document.removeEventListener('click', handleGlobalClick);
       };
     }
-  }, [showThemes, showLanguages, showDateFormats, showTimeFormats, showDataSources]);
+  }, [showThemes, showLanguages, showDateFormats, showTimeFormats]);
 
   // Close all submenus
   const closeAllSubmenus = () => {
@@ -94,7 +128,6 @@ export function SettingsMenu() {
     setShowLanguages(false);
     setShowDateFormats(false);
     setShowTimeFormats(false);
-    setShowDataSources(false);
   };
 
   // Toggle submenu - close others first
@@ -122,13 +155,7 @@ export function SettingsMenu() {
     setShowTimeFormats(newState);
   };
 
-  const toggleDataSources = () => {
-    const newState = !showDataSources;
-    closeAllSubmenus();
-    setShowDataSources(newState);
-  };
-
-  const handleLanguageSelect = (lang: 'en' | 'ru' | 'zh' | 'es' | 'ar' | 'hi' | 'pt' | 'fr' | 'de' | 'ja' | 'ko' | 'it' | 'tr' | 'ca') => {
+  const handleLanguageSelect = (lang: 'auto' | 'en' | 'ru' | 'zh' | 'es' | 'he' | 'uk' | 'be' | 'pt' | 'fr' | 'de' | 'ja' | 'ko' | 'it' | 'tr' | 'ca') => {
     setLanguage(lang);
     setShowLanguages(false);
   };
@@ -158,22 +185,6 @@ export function SettingsMenu() {
     setShowTimeFormats(false);
   };
 
-  const handleDataSourceSelect = (source: DataSource) => {
-    setDataSource(source);
-    setDataSourceState(source);
-    setShowDataSources(false);
-    // Reload the page to apply the new data source
-    window.location.reload();
-  };
-
-  const getDataSourceLabel = (source: DataSource) => {
-    switch (source) {
-      case 'mock': return 'Mock Data';
-      case 'devnet': return 'Sui Devnet';
-      case 'testnet': return 'Sui Testnet';
-      case 'mainnet': return 'Sui Mainnet';
-    }
-  };
 
   const getThemeLabel = () => {
     switch (themeMode) {
@@ -261,7 +272,7 @@ export function SettingsMenu() {
                 <span className="text-sm text-gray-900 dark:text-gray-100">{t('settings.language')}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-gray-600 dark:text-gray-300">
-                    {t(`language.${language === 'en' ? 'english' : language === 'ru' ? 'russian' : language === 'zh' ? 'chinese' : language === 'es' ? 'spanish' : language === 'ar' ? 'arabic' : language === 'hi' ? 'hindi' : language === 'pt' ? 'portuguese' : language === 'fr' ? 'french' : language === 'de' ? 'german' : language === 'ja' ? 'japanese' : language === 'ko' ? 'korean' : language === 'it' ? 'italian' : language === 'tr' ? 'turkish' : 'catalan'}`)}
+                    {t(`language.${languageSetting === 'auto' ? 'auto' : languageSetting === 'en' ? 'english' : languageSetting === 'ru' ? 'russian' : languageSetting === 'zh' ? 'chinese' : languageSetting === 'es' ? 'spanish' : languageSetting === 'he' ? 'hebrew' : languageSetting === 'uk' ? 'ukrainian' : languageSetting === 'be' ? 'belarusian' : languageSetting === 'pt' ? 'portuguese' : languageSetting === 'fr' ? 'french' : languageSetting === 'de' ? 'german' : languageSetting === 'ja' ? 'japanese' : languageSetting === 'ko' ? 'korean' : languageSetting === 'it' ? 'italian' : languageSetting === 'tr' ? 'turkish' : 'catalan'}`)}
                   </span>
                   <svg
                     className={`w-4 h-4 text-gray-400 transition-transform ${showLanguages ? 'rotate-180' : ''}`}
@@ -278,29 +289,50 @@ export function SettingsMenu() {
                 <div
                   className="absolute left-0 right-0 top-full mt-1 mx-4 py-1 max-h-64 overflow-y-auto bg-gray-100 dark:bg-gray-700 rounded-lg shadow-xl z-50 border border-gray-200 dark:border-gray-600"
                 >
-                  {([
-                    { code: 'en', key: 'english' },
-                    { code: 'ru', key: 'russian' },
-                    { code: 'zh', key: 'chinese' },
-                    { code: 'es', key: 'spanish' },
-                    { code: 'ar', key: 'arabic' },
-                    { code: 'hi', key: 'hindi' },
-                    { code: 'pt', key: 'portuguese' },
-                    { code: 'fr', key: 'french' },
-                    { code: 'de', key: 'german' },
-                    { code: 'ja', key: 'japanese' },
-                    { code: 'ko', key: 'korean' },
-                    { code: 'it', key: 'italian' },
-                    { code: 'tr', key: 'turkish' },
-                    { code: 'ca', key: 'catalan' },
-                  ] as const).map(lang => (
+                  {/* Auto */}
+                  <button
+                    onClick={() => handleLanguageSelect(languageGroups.auto.code)}
+                    className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between"
+                  >
+                    <span>{t(`language.${languageGroups.auto.key}`)}</span>
+                    {languageSetting === languageGroups.auto.code && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                  </button>
+
+                  {/* Divider with Verified label */}
+                  <div className="my-1 flex items-center gap-2 px-3">
+                    <div className="flex-1 border-t border-gray-200 dark:border-gray-600" />
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">Verified</span>
+                    <div className="flex-1 border-t border-gray-200 dark:border-gray-600" />
+                  </div>
+
+                  {/* Verified languages */}
+                  {languageGroups.verified.map(lang => (
                     <button
                       key={lang.code}
                       onClick={() => handleLanguageSelect(lang.code)}
                       className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between"
                     >
                       <span>{t(`language.${lang.key}`)}</span>
-                      {language === lang.code && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                      {languageSetting === lang.code && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                    </button>
+                  ))}
+
+                  {/* Divider with label */}
+                  <div className="my-1 flex items-center gap-2 px-3">
+                    <div className="flex-1 border-t border-gray-200 dark:border-gray-600" />
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">AI Generated</span>
+                    <div className="flex-1 border-t border-gray-200 dark:border-gray-600" />
+                  </div>
+
+                  {/* AI Generated languages */}
+                  {languageGroups.aiGenerated.map(lang => (
+                    <button
+                      key={lang.code}
+                      onClick={() => handleLanguageSelect(lang.code)}
+                      className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between"
+                    >
+                      <span>{t(`language.${lang.key}`)}</span>
+                      {languageSetting === lang.code && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
                     </button>
                   ))}
                 </div>
@@ -387,58 +419,6 @@ export function SettingsMenu() {
                         <span className="ml-2 opacity-60">({option.example})</span>
                       </span>
                       {timeFormat === option.value && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="my-2 border-t border-gray-200 dark:border-gray-700" />
-
-            <div className="px-4 py-2">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data Source</p>
-            </div>
-
-            {/* Data Source Selection */}
-            <div className="px-4 py-2 relative">
-              <button
-                onClick={toggleDataSources}
-                className="w-full flex items-center justify-between text-left"
-              >
-                <span className="text-sm text-gray-900 dark:text-gray-100">Source</span>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm ${dataSource === 'devnet' ? 'text-orange-600 dark:text-orange-400' : dataSource === 'testnet' ? 'text-cyan-600 dark:text-cyan-400' : dataSource === 'mainnet' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-300'}`}>
-                    {getDataSourceLabel(dataSource)}
-                  </span>
-                  <svg
-                    className={`w-4 h-4 text-gray-400 transition-transform ${showDataSources ? 'rotate-180' : ''}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </button>
-
-              {showDataSources && (
-                <div
-                  className="absolute left-0 right-0 top-full mt-1 mx-4 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-xl z-50 border border-gray-200 dark:border-gray-600"
-                >
-                  {(['mock', 'devnet', 'testnet', 'mainnet'] as const).map(source => (
-                    <button
-                      key={source}
-                      onClick={() => handleDataSourceSelect(source)}
-                      disabled={source === 'mainnet'}
-                      className={`w-full px-3 py-1.5 text-left text-sm hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between ${source === 'mainnet' ? 'opacity-50 cursor-not-allowed' : ''} ${source === 'devnet' ? 'text-orange-600 dark:text-orange-400' : source === 'testnet' ? 'text-cyan-600 dark:text-cyan-400' : source === 'mainnet' ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}
-                    >
-                      <span>
-                        {getDataSourceLabel(source)}
-                        {source === 'devnet' && <span className="ml-2 opacity-60">(zkLogin)</span>}
-                        {source === 'mainnet' && <span className="ml-2 opacity-60">(Coming soon)</span>}
-                      </span>
-                      {dataSource === source && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
                     </button>
                   ))}
                 </div>

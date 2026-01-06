@@ -319,3 +319,38 @@ export function getTimeFormatOptions(): { value: TimeFormat; label: string; exam
     { value: '24h', label: '24-hour', example: `23:59 ${tz}` },
   ];
 }
+
+/**
+ * Format time with seconds according to user's preference
+ * Used for "last updated" timestamps
+ * @param date - Date object
+ * @returns Time string like "23:59:45" or "11:59:45 PM"
+ */
+export function formatTimeWithSeconds(date: Date): string {
+  const timeFormat = getTimeFormat();
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+
+  if (timeFormat === 'auto') {
+    const formatted = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(date);
+    // Insert seconds before AM/PM or at the end
+    if (formatted.includes('AM') || formatted.includes('PM')) {
+      return formatted.replace(/ (AM|PM)/, `:${seconds} $1`);
+    }
+    return `${formatted}:${seconds}`;
+  }
+
+  const hours = date.getHours();
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+
+  if (timeFormat === '12h') {
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    return `${hours12}:${minutes}:${seconds} ${period}`;
+  }
+
+  // 24h format
+  return `${hours.toString().padStart(2, '0')}:${minutes}:${seconds}`;
+}

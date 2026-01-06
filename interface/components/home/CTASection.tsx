@@ -18,16 +18,16 @@ export function CTASection() {
   }, []);
 
   return (
-    <section className="py-24 md:py-32 px-6">
+    <section className="py-16 md:py-20 px-6">
       <div className="max-w-3xl mx-auto text-center">
         <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-3">
           Create your first campaign
         </h2>
-        <p className="text-lg text-gray-600 dark:text-gray-400 mb-10">
+        <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">
           Takes under a minute
         </p>
 
-        <div className="bg-gray-50 dark:bg-white/5 rounded-2xl p-8 mb-14 text-left max-w-2xl mx-auto">
+        <div className="bg-gray-50 dark:bg-white/5 rounded-2xl p-8 mb-10 text-left max-w-2xl mx-auto">
           <div className="flex flex-col items-center text-center mb-8">
             <div className="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center mb-4">
               <svg className="w-6 h-6 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

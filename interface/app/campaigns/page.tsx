@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import Link from 'next/link';
+import { useCopyLink } from '@/hooks/useCopyLink';
 import {
   mockPortfolioCampaigns,
   mockActivityCampaigns,
@@ -18,6 +19,7 @@ import { getDataSource } from '@/lib/sui-config';
 import { fetchCampaignsByCreator, fetchParticipatedCampaigns, ParticipatedCampaign } from '@/lib/sui-service';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveReferrer } from '@/lib/navigation';
+import { LastUpdated } from '@/components/LastUpdated';
 
 type TabType = 'created' | 'participated';
 
@@ -26,6 +28,7 @@ function CampaignsContent() {
   const router = useRouter();
   const account = useCurrentAccount();
   const { requireAuth } = useAuth();
+  const { copyLink, isCopied } = useCopyLink();
   const tabParam = searchParams.get('tab') as TabType | null;
   const [activeTab, setActiveTab] = useState<TabType>('created');
   const [statusFilter, setStatusFilter] = useState<CampaignStatus | null>(null);
@@ -34,7 +37,9 @@ function CampaignsContent() {
   const [blockchainCampaigns, setBlockchainCampaigns] = useState<CampaignDetails[]>([]);
   const [participatedCampaigns, setParticipatedCampaigns] = useState<ParticipatedCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // zkLogin address from localStorage
   const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
@@ -84,6 +89,32 @@ function CampaignsContent() {
     }
   }, [tabParam, isLoading, dataSource, blockchainCampaigns.length, participatedCampaigns.length]);
 
+  // Fetch campaigns from blockchain
+  const fetchData = useCallback(async (showLoading = true) => {
+    if (!connectedAddress) return;
+    if (showLoading) setIsLoading(true);
+    try {
+      // Fetch both created and participated campaigns in parallel
+      const [created, participated] = await Promise.all([
+        fetchCampaignsByCreator(connectedAddress),
+        fetchParticipatedCampaigns(connectedAddress),
+      ]);
+      setBlockchainCampaigns(created);
+      setParticipatedCampaigns(participated);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Failed to fetch campaigns:', error);
+    } finally {
+      if (showLoading) setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [connectedAddress]);
+
+  const handleManualRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    fetchData(false);
+  }, [fetchData]);
+
   // Load data source and fetch campaigns from blockchain if needed
   useEffect(() => {
     const source = getDataSource();
@@ -94,29 +125,20 @@ function CampaignsContent() {
       setBlockchainCampaigns([]);
       setParticipatedCampaigns([]);
       setIsLoading(false);
+      setLastUpdated(null);
       return;
     }
 
     if (source !== 'mock') {
-      setIsLoading(true);
-      const fetchData = async () => {
-        try {
-          // Fetch both created and participated campaigns in parallel
-          const [created, participated] = await Promise.all([
-            fetchCampaignsByCreator(connectedAddress),
-            fetchParticipatedCampaigns(connectedAddress),
-          ]);
-          setBlockchainCampaigns(created);
-          setParticipatedCampaigns(participated);
-        } catch (error) {
-          console.error('Failed to fetch campaigns:', error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchData();
+      // Initial fetch with loading state
+      fetchData(true);
+
+      // Poll every 5 seconds without loading state
+      const interval = setInterval(() => fetchData(false), 5000);
+
+      return () => clearInterval(interval);
     }
-  }, [connectedAddress]);
+  }, [connectedAddress, fetchData]);
 
   // Convert CampaignDetails to PortfolioCampaign format
   const convertToPortfolioCampaign = (c: CampaignDetails): PortfolioCampaign => ({
@@ -227,7 +249,7 @@ function CampaignsContent() {
     <div className="max-w-6xl mx-auto px-6 py-12">
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-start mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-2">Campaigns</h1>
           <p className="text-gray-500 dark:text-gray-400">
@@ -250,7 +272,8 @@ function CampaignsContent() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex items-end justify-between mb-6">
+        <div className="flex gap-2">
         <TabButton
           active={activeTab === 'created'}
           onClick={() => { setActiveTab('created'); setStatusFilter(null); }}
@@ -265,6 +288,14 @@ function CampaignsContent() {
         >
           Participated
         </TabButton>
+        </div>
+        {dataSource !== 'mock' && connectedAddress && (
+          <LastUpdated
+            lastUpdated={lastUpdated}
+            onRefresh={handleManualRefresh}
+            isLoading={isRefreshing}
+          />
+        )}
       </div>
 
       {/* Stats */}
@@ -317,9 +348,9 @@ function CampaignsContent() {
         ) : (
           filteredCampaigns.map(campaign => (
             activeTab === 'participated' ? (
-              <ParticipatingCard key={campaign.id} campaign={campaign as ActivityCampaign} />
+              <ParticipatingCard key={campaign.id} campaign={campaign as ActivityCampaign} copyLink={copyLink} isCopied={isCopied} />
             ) : (
-              <CreatedCard key={campaign.id} campaign={campaign as PortfolioCampaign} />
+              <CreatedCard key={campaign.id} campaign={campaign as PortfolioCampaign} copyLink={copyLink} isCopied={isCopied} />
             )
           ))
         )}
@@ -442,7 +473,11 @@ function StatCard({
 }
 
 // Card for "Created" tab
-function CreatedCard({ campaign }: { campaign: PortfolioCampaign }) {
+function CreatedCard({ campaign, copyLink, isCopied }: {
+  campaign: PortfolioCampaign;
+  copyLink: (id: string, e?: React.MouseEvent) => void;
+  isCopied: (id: string) => boolean;
+}) {
   const statusInfo = CAMPAIGN_STATUSES[campaign.status];
   const mainLink = `/campaigns/${campaign.id}`;
 
@@ -481,6 +516,31 @@ function CreatedCard({ campaign }: { campaign: PortfolioCampaign }) {
         <div className="text-right shrink-0">
           <div className="text-2xl font-bold text-gray-900 dark:text-white">{campaign.responsesCount || 0}</div>
           <div className="text-sm text-gray-500 dark:text-gray-500">responses</div>
+          <button
+            onClick={(e) => copyLink(campaign.id, e)}
+            className={`flex items-center gap-1 text-sm mt-2 transition ${
+              isCopied(campaign.id)
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+            }`}
+            title={isCopied(campaign.id) ? 'Copied!' : 'Copy link'}
+          >
+            {isCopied(campaign.id) ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Copied</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <span>Copy link</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </Link>
@@ -488,7 +548,11 @@ function CreatedCard({ campaign }: { campaign: PortfolioCampaign }) {
 }
 
 // Card for "Participated" tab
-function ParticipatingCard({ campaign }: { campaign: ActivityCampaign }) {
+function ParticipatingCard({ campaign, copyLink, isCopied }: {
+  campaign: ActivityCampaign;
+  copyLink: (id: string, e?: React.MouseEvent) => void;
+  isCopied: (id: string) => boolean;
+}) {
   const statusInfo = CAMPAIGN_STATUSES[campaign.status];
   const mainLink = `/campaigns/${campaign.id}`;
   const resultsLink = `/campaigns/${campaign.id}?tab=results`;
@@ -526,13 +590,40 @@ function ParticipatingCard({ campaign }: { campaign: ActivityCampaign }) {
           </div>
         </Link>
 
-        <Link
-          href={resultsLink}
-          onClick={() => saveReferrer(resultsLink)}
-          className="shrink-0 text-cyan-600 dark:text-cyan-400 text-sm hover:underline"
-        >
-          View Results →
-        </Link>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <Link
+            href={resultsLink}
+            onClick={() => saveReferrer(resultsLink)}
+            className="text-cyan-600 dark:text-cyan-400 text-sm hover:underline"
+          >
+            View Results →
+          </Link>
+          <button
+            onClick={(e) => copyLink(campaign.id, e)}
+            className={`flex items-center gap-1 text-sm transition ${
+              isCopied(campaign.id)
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+            }`}
+            title={isCopied(campaign.id) ? 'Copied!' : 'Copy link'}
+          >
+            {isCopied(campaign.id) ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Copied</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <span>Copy link</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

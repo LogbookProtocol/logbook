@@ -6,10 +6,10 @@ export const SPONSORSHIP_LIMITS = {
   MAX_RESPONSES: 10,   // First 10 responses are sponsored
 } as const;
 
-// Sui config for server-side usage
+// Sui config for server-side usage (keep in sync with sui-config.ts)
 const SUI_CONFIG = {
   devnet: {
-    registryId: '0x595362674553a8371dcccdcb6ca094e82e5d2fdcc4fd12d9cef4e81221707fcd',
+    registryId: '0x2a14c51ea75512e3e297ff3463f58b8ab9b3b68f0d7927dacbab6635de372249',
     rpcUrl: 'https://fullnode.devnet.sui.io:443',
   },
   testnet: {
@@ -79,7 +79,7 @@ async function countUserCampaigns(client: SuiClient, address: string): Promise<n
   }
 }
 
-// Count responses submitted by user from blockchain
+// Count total responses received on campaigns created by user
 async function countUserResponses(client: SuiClient, address: string): Promise<number> {
   try {
     const registryId = getRegistryId();
@@ -93,47 +93,49 @@ async function countUserResponses(client: SuiClient, address: string): Promise<n
     }
 
     const registryData = registry.data.content.fields as {
-      all_campaigns: Array<string | { id: string }>;
+      campaigns_by_creator: {
+        fields: {
+          contents: Array<{
+            fields: { key: string; value: Array<string | { id: string }> };
+          }>;
+        };
+      };
     };
 
-    if (!registryData.all_campaigns || registryData.all_campaigns.length === 0) {
+    // Find campaigns created by this user
+    const creatorEntry = registryData.campaigns_by_creator?.fields?.contents?.find(
+      (entry) => entry.fields.key === address
+    );
+
+    if (!creatorEntry || creatorEntry.fields.value.length === 0) {
       return 0;
     }
 
-    const campaignIds = registryData.all_campaigns.map((c) =>
+    const campaignIds = creatorEntry.fields.value.map((c) =>
       typeof c === 'string' ? c : c.id
     );
 
-    // Fetch all campaign objects
+    // Fetch user's campaign objects
     const campaigns = await client.multiGetObjects({
       ids: campaignIds,
       options: { showContent: true },
     });
 
-    let responseCount = 0;
+    let totalResponses = 0;
 
     for (const obj of campaigns) {
       if (!obj.data?.content || obj.data.content.dataType !== 'moveObject') continue;
 
       const content = obj.data.content as unknown as {
         fields: {
-          participants: {
-            fields: {
-              contents: Array<{ fields: { key: string } }>;
-            };
-          };
+          total_responses: string;
         };
       };
 
-      const participants = content.fields.participants?.fields?.contents || [];
-      const isParticipant = participants.some((p) => p.fields.key === address);
-
-      if (isParticipant) {
-        responseCount++;
-      }
+      totalResponses += parseInt(content.fields.total_responses || '0', 10);
     }
 
-    return responseCount;
+    return totalResponses;
   } catch (error) {
     console.error('Error counting user responses:', error);
     return 0;

@@ -2,11 +2,13 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-type Language = 'en' | 'ru' | 'zh' | 'es' | 'ar' | 'hi' | 'pt' | 'fr' | 'de' | 'ja' | 'ko' | 'it' | 'tr' | 'ca';
+type Language = 'en' | 'ru' | 'zh' | 'es' | 'he' | 'uk' | 'be' | 'pt' | 'fr' | 'de' | 'ja' | 'ko' | 'it' | 'tr' | 'ca';
+type LanguageSetting = 'auto' | Language;
 
 interface LanguageContextType {
-  language: Language;
-  setLanguage: (lang: Language) => void;
+  language: Language; // The actual resolved language (never 'auto')
+  languageSetting: LanguageSetting; // The user's setting (can be 'auto')
+  setLanguage: (lang: LanguageSetting) => void;
   t: (key: string) => string;
   mounted: boolean;
 }
@@ -15,12 +17,14 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 // Common language names used across all translations
 const languageNames = {
+  'language.auto': 'Auto',
   'language.english': 'English',
   'language.russian': 'Русский',
   'language.chinese': '中文',
   'language.spanish': 'Español',
-  'language.arabic': 'العربية',
-  'language.hindi': 'हिन्दी',
+  'language.hebrew': 'עברית',
+  'language.ukrainian': 'Українська',
+  'language.belarusian': 'Беларуская',
   'language.portuguese': 'Português',
   'language.french': 'Français',
   'language.german': 'Deutsch',
@@ -146,8 +150,9 @@ const translations = {
   ru: { ...baseRussian, ...languageNames },
   zh: { ...baseEnglish, ...languageNames },
   es: { ...baseEnglish, ...languageNames },
-  ar: { ...baseEnglish, ...languageNames },
-  hi: { ...baseEnglish, ...languageNames },
+  he: { ...baseEnglish, ...languageNames },
+  uk: { ...baseEnglish, ...languageNames },
+  be: { ...baseEnglish, ...languageNames },
   pt: { ...baseEnglish, ...languageNames },
   fr: { ...baseEnglish, ...languageNames },
   de: { ...baseEnglish, ...languageNames },
@@ -158,30 +163,90 @@ const translations = {
   ca: { ...baseEnglish, ...languageNames },
 };
 
+// Detect browser language and map to supported language
+function detectBrowserLanguage(): Language {
+  const validLanguages: Language[] = ['en', 'ru', 'zh', 'es', 'he', 'uk', 'be', 'pt', 'fr', 'de', 'ja', 'ko', 'it', 'tr', 'ca'];
+
+  // Get browser languages (returns array like ['ru-RU', 'en-US', 'en'])
+  const browserLanguages = navigator.languages || [navigator.language];
+
+  for (const browserLang of browserLanguages) {
+    // Extract base language code (e.g., 'ru' from 'ru-RU')
+    const baseLang = browserLang.split('-')[0].toLowerCase() as Language;
+
+    // Direct match
+    if (validLanguages.includes(baseLang)) {
+      return baseLang;
+    }
+
+    // Special case: zh-TW, zh-HK -> zh (Chinese)
+    if (browserLang.startsWith('zh')) {
+      return 'zh';
+    }
+  }
+
+  // Default to English
+  return 'en';
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('en');
+  const [languageSetting, setLanguageSettingState] = useState<LanguageSetting>('auto');
+  const [resolvedLanguage, setResolvedLanguage] = useState<Language>('en');
   const [mounted, setMounted] = useState(false);
+
+  // Update resolved language when setting changes or when in auto mode
+  const updateResolvedLanguage = (setting: LanguageSetting) => {
+    if (setting === 'auto') {
+      setResolvedLanguage(detectBrowserLanguage());
+    } else {
+      setResolvedLanguage(setting);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
-    const savedLanguage = localStorage.getItem('language') as Language | null;
-    const validLanguages: Language[] = ['en', 'ru', 'zh', 'es', 'ar', 'hi', 'pt', 'fr', 'de', 'ja', 'ko', 'it', 'tr', 'ca'];
-    if (savedLanguage && validLanguages.includes(savedLanguage)) {
-      setLanguageState(savedLanguage);
+    const validSettings: LanguageSetting[] = ['auto', 'en', 'ru', 'zh', 'es', 'he', 'uk', 'be', 'pt', 'fr', 'de', 'ja', 'ko', 'it', 'tr', 'ca'];
+
+    // Check for saved language preference
+    const savedSetting = localStorage.getItem('language') as LanguageSetting | null;
+    if (savedSetting && validSettings.includes(savedSetting)) {
+      setLanguageSettingState(savedSetting);
+      updateResolvedLanguage(savedSetting);
+    } else {
+      // Default to auto
+      setLanguageSettingState('auto');
+      updateResolvedLanguage('auto');
     }
   }, []);
 
-  const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
+  // Listen for system language changes when in auto mode
+  useEffect(() => {
+    if (languageSetting !== 'auto') return;
+
+    const handleLanguageChange = () => {
+      setResolvedLanguage(detectBrowserLanguage());
+    };
+
+    // Listen for language change events (works in some browsers)
+    window.addEventListener('languagechange', handleLanguageChange);
+
+    return () => {
+      window.removeEventListener('languagechange', handleLanguageChange);
+    };
+  }, [languageSetting]);
+
+  const setLanguage = (lang: LanguageSetting) => {
+    setLanguageSettingState(lang);
+    updateResolvedLanguage(lang);
     localStorage.setItem('language', lang);
   };
 
   const t = (key: string): string => {
-    return translations[language][key as keyof typeof translations['en']] || key;
+    return translations[resolvedLanguage][key as keyof typeof translations['en']] || key;
   };
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, mounted }}>
+    <LanguageContext.Provider value={{ language: resolvedLanguage, languageSetting, setLanguage, t, mounted }}>
       {children}
     </LanguageContext.Provider>
   );

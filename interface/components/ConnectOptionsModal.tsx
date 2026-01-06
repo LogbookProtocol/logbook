@@ -47,6 +47,14 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
     }
   }, [open, onOpenChange]);
 
+  // Clear return URL when modal is closed without successful auth
+  useEffect(() => {
+    if (!open && !isLoadingGoogle) {
+      // Modal was closed and we're not redirecting to Google OAuth
+      sessionStorage.removeItem('zklogin_return_url');
+    }
+  }, [open, isLoadingGoogle]);
+
   const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
     try {
