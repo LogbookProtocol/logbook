@@ -9,7 +9,7 @@ import { Question, QuestionType, AnswerOption } from '@/types/campaign';
 import { formatDate, getEndTimeDisplay, localDateToEndOfDayUTC } from '@/lib/format-date';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { getDataSource } from '@/lib/sui-config';
-import { buildCreateCampaignTx, executeZkLoginSponsoredTransaction, getSponsorshipStatus } from '@/lib/sui-service';
+import { buildCreateCampaignTx, executeZkLoginSponsoredTransaction, executeZkLoginTransaction, getSponsorshipStatus } from '@/lib/sui-service';
 import { getReferrer } from '@/lib/navigation';
 
 export default function NewCampaignPage() {
@@ -89,8 +89,8 @@ export default function NewCampaignPage() {
       canUseSponsorship = sponsorshipStatus?.canSponsorCampaign ?? false;
     }
 
-    // If no zkLogin with sponsorship and no wallet, require connection
-    if (!canUseSponsorship && !account) {
+    // If no zkLogin and no wallet, require connection
+    if (!zkLoginAddress && !account) {
       setDeployError('Please connect your wallet to create a campaign');
       setIsDeploying(false);
       return;
@@ -120,20 +120,30 @@ export default function NewCampaignPage() {
         return;
       }
 
-      // Use sponsored transaction if available for zkLogin users
-      if (canUseSponsorship && zkLoginAddress) {
+      // Use zkLogin transaction for Google users
+      if (zkLoginAddress) {
         try {
-          const result = await executeZkLoginSponsoredTransaction(tx, zkLoginAddress);
-          console.log('Campaign deployed with sponsorship:', result.digest);
+          // Try sponsored first if available
+          if (canUseSponsorship) {
+            const result = await executeZkLoginSponsoredTransaction(tx, zkLoginAddress);
+            console.log('Campaign deployed with sponsorship:', result.digest);
+            resetForm();
+            router.push('/campaigns');
+            return;
+          }
+
+          // Fall back to non-sponsored zkLogin (user pays gas)
+          const result = await executeZkLoginTransaction(tx, zkLoginAddress);
+          console.log('Campaign deployed with zkLogin (user paid gas):', result.digest);
           resetForm();
-          // For sponsored transactions, redirect to campaigns list
-          // (we don't get object changes in the same format)
           router.push('/campaigns');
         } catch (error) {
           const err = error as Error & { code?: string };
-          console.error('Sponsored deploy failed:', error);
+          console.error('zkLogin deploy failed:', error);
           if (err.code === 'CAMPAIGN_LIMIT_REACHED') {
-            setDeployError('You have already created your free sponsored campaign. Please connect a wallet to create more campaigns.');
+            setDeployError('Sponsored campaign limit reached. You need SUI balance to create more campaigns.');
+          } else if (err.message?.includes('Insufficient gas')) {
+            setDeployError('Insufficient SUI balance. Get test SUI from the faucet in Account page.');
           } else {
             setDeployError(err.message || 'Failed to deploy campaign');
           }

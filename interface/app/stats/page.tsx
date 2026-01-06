@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { protocolStats } from '@/lib/mock-stats';
 import { getDataSource } from '@/lib/sui-config';
-import { fetchProtocolStats, ProtocolStatsBlockchain } from '@/lib/sui-service';
+import { fetchProtocolStats, fetchProtocolGasStats, ProtocolStatsBlockchain, ProtocolGasStats } from '@/lib/sui-service';
 import { LastUpdated } from '@/components/LastUpdated';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { fetchSuiPriceWithMeta, SuiPriceResult } from '@/lib/sui-gas-price';
 
-function StatCard({ label, value, isLoading }: { label: string; value: string; isLoading?: boolean }) {
+function StatCard({ label, value, subtitle, isLoading }: { label: string; value: string; subtitle?: string; isLoading?: boolean }) {
   return (
     <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
       <div className="text-2xl font-bold bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent">
@@ -16,25 +18,58 @@ function StatCard({ label, value, isLoading }: { label: string; value: string; i
           value
         )}
       </div>
-      <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="text-sm text-gray-500 dark:text-gray-400">
+        {label}
+        {subtitle && <span className="text-gray-400 dark:text-gray-500"> ({subtitle})</span>}
+      </div>
     </div>
   );
 }
 
 export default function StatsPage() {
-  const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
+  // Initialize to null to avoid flash of wrong content
+  const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet' | null>(null);
   const [blockchainStats, setBlockchainStats] = useState<ProtocolStatsBlockchain | null>(null);
+  const [gasStats, setGasStats] = useState<ProtocolGasStats | null>(null);
+  const [suiPriceData, setSuiPriceData] = useState<SuiPriceResult>({ price: 0, timestamp: null, isFallback: false });
+  const [isPriceRefreshing, setIsPriceRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const { currency, currencySymbol } = useCurrency();
 
   const fetchStats = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     setError(null);
     try {
-      const stats = await fetchProtocolStats();
-      setBlockchainStats(stats);
+      // Fetch stats independently so one failure doesn't block others
+      const [statsResult, gasResult, priceResult] = await Promise.allSettled([
+        fetchProtocolStats(),
+        fetchProtocolGasStats(),
+        fetchSuiPriceWithMeta(currency),
+      ]);
+
+      if (statsResult.status === 'fulfilled') {
+        setBlockchainStats(statsResult.value);
+      } else {
+        console.error('Failed to fetch protocol stats:', statsResult.reason);
+        setError('Failed to connect to blockchain. Please try again later.');
+      }
+
+      if (gasResult.status === 'fulfilled') {
+        setGasStats(gasResult.value);
+      } else {
+        console.error('Failed to fetch gas stats:', gasResult.reason);
+        // Don't show error for gas stats - it's optional
+      }
+
+      if (priceResult.status === 'fulfilled') {
+        setSuiPriceData(priceResult.value);
+      } else {
+        console.error('Failed to fetch SUI price:', priceResult.reason);
+      }
+
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Failed to fetch stats:', err);
@@ -43,12 +78,24 @@ export default function StatsPage() {
       if (showLoading) setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [currency]);
 
   const handleManualRefresh = useCallback(() => {
     setIsRefreshing(true);
     fetchStats(false);
   }, [fetchStats]);
+
+  const handlePriceRefresh = useCallback(async () => {
+    setIsPriceRefreshing(true);
+    try {
+      const result = await fetchSuiPriceWithMeta(currency, true); // force refresh
+      setSuiPriceData(result);
+    } catch (error) {
+      console.error('Failed to refresh SUI price:', error);
+    } finally {
+      setIsPriceRefreshing(false);
+    }
+  }, [currency]);
 
   useEffect(() => {
     const source = getDataSource();
@@ -67,6 +114,7 @@ export default function StatsPage() {
 
   // Use blockchain stats or mock data
   const isMock = dataSource === 'mock';
+  const isInitialized = dataSource !== null;
   const overview = !isMock && blockchainStats
     ? {
         totalCampaigns: blockchainStats.totalCampaigns,
@@ -90,6 +138,26 @@ export default function StatsPage() {
     dataSource === 'testnet' ? 'Sui Testnet' :
     dataSource === 'mainnet' ? 'Sui Mainnet' : 'Mock Data';
 
+  // Show loading state until dataSource is determined
+  if (!isInitialized) {
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-12">
+        <div className="mb-8">
+          <div className="h-9 w-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2" />
+          <div className="h-5 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+              <div className="h-7 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2" />
+              <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-6 py-12">
 
@@ -98,7 +166,7 @@ export default function StatsPage() {
         <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-2">Protocol Statistics</h1>
         <div className="flex items-end justify-between">
           <p className="text-gray-500 dark:text-gray-400">
-            {isMock ? 'Demo metrics (mock data)' : `Live metrics from ${networkLabel}`}
+            {isMock ? 'Demo metrics (mock data)' : `All-time statistics from ${networkLabel}`}
           </p>
           {!isMock && (
             <LastUpdated
@@ -142,6 +210,53 @@ export default function StatsPage() {
           />
         )}
       </div>
+
+      {/* Gas costs - same style as overview stats */}
+      {!isMock && gasStats && (
+        <div className="grid grid-cols-2 gap-4 mb-12">
+          <StatCard
+            label="Gas on Campaigns"
+            value={`${currencySymbol}${(gasStats.totalGasSpentOnCampaigns * suiPriceData.price).toFixed(2)}`}
+            subtitle={`${gasStats.totalGasSpentOnCampaigns.toFixed(4)} SUI`}
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Gas on Responses"
+            value={`${currencySymbol}${(gasStats.totalGasSpentOnResponses * suiPriceData.price).toFixed(2)}`}
+            subtitle={`${gasStats.totalGasSpentOnResponses.toFixed(4)} SUI`}
+            isLoading={isLoading}
+          />
+        </div>
+      )}
+
+      {/* SUI Price - compact info line */}
+      {!isMock && suiPriceData.price > 0 && (
+        <div className="mb-12 flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+          <span>SUI Price: <span className="font-medium text-gray-700 dark:text-gray-300">{currencySymbol}{suiPriceData.price.toFixed(2)}</span></span>
+          {suiPriceData.isFallback ? (
+            <span className="text-xs text-amber-600 dark:text-amber-400">(fallback)</span>
+          ) : suiPriceData.timestamp && (
+            <span className="text-xs">({suiPriceData.timestamp.toLocaleTimeString()})</span>
+          )}
+          <button
+            onClick={handlePriceRefresh}
+            disabled={isPriceRefreshing}
+            className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 disabled:opacity-50"
+            title="Refresh price"
+          >
+            {isPriceRefreshing ? (
+              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Growth section - only for mock data */}
       {isMock && (

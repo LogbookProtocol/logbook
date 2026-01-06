@@ -51,7 +51,7 @@ export function ComparisonSection() {
     {
       category: 'Who controls the truth?',
       traditional: 'The platform (Google, Telegram, etc)',
-      logbook: <>The blockchain (Sui network). <a href="/docs?doc=why-sui" className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-0.5">Learn more<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg></a></>,
+      logbook: <>The blockchain (Sui network). <a href="/docs?doc=why-sui" className="text-cyan-600 dark:text-cyan-400 hover:underline">Learn more →</a></>,
     },
     {
       category: 'Trust model',
@@ -81,12 +81,12 @@ export function ComparisonSection() {
     {
       category: 'Ease of use',
       traditional: '✅ Instant, familiar - Just create account',
-      logbook: <>✅ Google sign-in - No wallet needed (zkLogin). <a href="/docs?doc=authentication" className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-0.5">Learn more<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg></a></>,
+      logbook: <>✅ Google sign-in - No wallet needed (zkLogin). <a href="/docs?doc=authentication" className="text-cyan-600 dark:text-cyan-400 hover:underline">Learn more →</a></>,
     },
     {
       category: 'Cost',
       traditional: '✅ Free',
-      logbook: <>✅ Free beta (first 2 campaigns and 10 responses free). <a href="/docs?doc=free-tier" className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-0.5">Learn more<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg></a></>,
+      logbook: <>✅ Free beta (first 2 campaigns and 10 responses free). <a href="/docs?doc=free-tier" className="text-cyan-600 dark:text-cyan-400 hover:underline">Learn more →</a></>,
     },
   ];
 

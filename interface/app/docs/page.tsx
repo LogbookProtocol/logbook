@@ -101,8 +101,14 @@ function renderMarkdown(content: string): string {
   // Bold
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="docs-bold">$1</strong>');
 
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="docs-link" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Links - internal links open in same tab, external links open in new tab
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+    const isInternal = url.startsWith('/');
+    if (isInternal) {
+      return `<a href="${url}" class="docs-link">${text}</a>`;
+    }
+    return `<a href="${url}" class="docs-link" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  });
 
   // Lists with proper nesting
   html = html.replace(/^(\d+)\. \*\*(.*?)\*\*: (.*$)/gm, '<li class="docs-li numbered"><span class="list-number">$1</span><span class="list-content"><strong class="docs-bold">$2</strong>: $3</span></li>');

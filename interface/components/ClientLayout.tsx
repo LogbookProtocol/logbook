@@ -2,6 +2,7 @@
 
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { Providers } from '@/app/providers';
 import { SettingsMenu } from '@/components/SettingsMenu';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -198,20 +199,20 @@ function LayoutContent({ children }: { children: ReactNode }) {
       {/* Beta Banner */}
       <div
         ref={bannerRef}
-        className={`fixed top-0 left-0 right-0 bg-green-950 text-green-500 text-xs sm:text-sm text-center py-1.5 px-4 ${
+        className={`fixed top-0 left-0 right-0 bg-green-950 text-green-500 text-xs sm:text-sm text-center py-1.5 px-4 whitespace-nowrap ${
           shouldAnimateHeader ? 'transition-opacity duration-[3000ms] ease-out' : ''
         } ${headerVisible ? 'opacity-100' : 'opacity-0'}`}
         style={{ zIndex: 52 }}
       >
         <span className="hidden sm:inline">You're testing Logbook Beta on Sui Devnet. All data will be deleted after testing. Found a bug or have questions? Let us know at </span>
-        <span className="sm:hidden">Beta on Sui Devnet. Data will be deleted. Contact: </span>
+        <span className="sm:hidden">Beta testing. Data will be deleted. </span>
         <button
           onClick={() => {
             navigator.clipboard.writeText('hello@logbook.zone');
             setBannerEmailCopied(true);
             setTimeout(() => setBannerEmailCopied(false), 2000);
           }}
-          className={`inline-flex items-center gap-1 font-medium transition-colors ${bannerEmailCopied ? 'text-white' : 'underline hover:no-underline'}`}
+          className={`inline-flex items-center gap-1 font-medium transition-colors ${bannerEmailCopied ? 'text-white' : 'hover:underline'}`}
           title={bannerEmailCopied ? 'Copied!' : 'Copy email'}
         >
           <span>hello@logbook.zone</span>
@@ -649,9 +650,11 @@ export function ClientLayout({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <Providers>
-          <LayoutContent>{children}</LayoutContent>
-        </Providers>
+        <CurrencyProvider>
+          <Providers>
+            <LayoutContent>{children}</LayoutContent>
+          </Providers>
+        </CurrencyProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

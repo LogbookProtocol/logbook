@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLanguage, Language, LanguageSetting } from '@/contexts/LanguageContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useCurrency, CurrencySetting } from '@/contexts/CurrencyContext';
 import {
   DateFormat,
   TimeFormat,
@@ -55,9 +56,11 @@ export function SettingsMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showLanguages, setShowLanguages] = useState(false);
+  const [showCurrencies, setShowCurrencies] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { languageSetting, setLanguage, t } = useLanguage();
   const { themeMode, setThemeMode } = useTheme();
+  const { currencySetting, setCurrency, currencySymbol } = useCurrency();
 
   // Shuffled languages - computed once on component mount
   // Structure: { auto, verified (English first, rest shuffled), aiGenerated (shuffled) }
@@ -104,11 +107,12 @@ export function SettingsMenu() {
       // Close all submenus on any click
       setShowThemes(false);
       setShowLanguages(false);
+      setShowCurrencies(false);
       setShowDateFormats(false);
       setShowTimeFormats(false);
     }
 
-    const anySubmenuOpen = showThemes || showLanguages || showDateFormats || showTimeFormats;
+    const anySubmenuOpen = showThemes || showLanguages || showCurrencies || showDateFormats || showTimeFormats;
     if (anySubmenuOpen) {
       // Use setTimeout to let the current click event complete first
       // This allows the option selection to happen before closing
@@ -120,12 +124,13 @@ export function SettingsMenu() {
         document.removeEventListener('click', handleGlobalClick);
       };
     }
-  }, [showThemes, showLanguages, showDateFormats, showTimeFormats]);
+  }, [showThemes, showLanguages, showCurrencies, showDateFormats, showTimeFormats]);
 
   // Close all submenus
   const closeAllSubmenus = () => {
     setShowThemes(false);
     setShowLanguages(false);
+    setShowCurrencies(false);
     setShowDateFormats(false);
     setShowTimeFormats(false);
   };
@@ -141,6 +146,12 @@ export function SettingsMenu() {
     const newState = !showLanguages;
     closeAllSubmenus();
     setShowLanguages(newState);
+  };
+
+  const toggleCurrencies = () => {
+    const newState = !showCurrencies;
+    closeAllSubmenus();
+    setShowCurrencies(newState);
   };
 
   const toggleDateFormats = () => {
@@ -163,6 +174,27 @@ export function SettingsMenu() {
   const handleThemeSelect = (mode: 'auto' | 'light' | 'dark') => {
     setThemeMode(mode);
     setShowThemes(false);
+  };
+
+  const handleCurrencySelect = (currency: CurrencySetting) => {
+    setCurrency(currency);
+    setShowCurrencies(false);
+  };
+
+  const getCurrencyLabelText = (currency: CurrencySetting) => {
+    switch (currency) {
+      case 'auto': return `Auto (${currencySymbol})`;
+      case 'usd': return 'USD ($)';
+      case 'eur': return 'EUR (€)';
+    }
+  };
+
+  const getCurrencyOptionLabel = (currency: CurrencySetting) => {
+    switch (currency) {
+      case 'auto': return 'Auto';
+      case 'usd': return 'USD ($)';
+      case 'eur': return 'EUR (€)';
+    }
   };
 
   const getThemeLabelText = (mode: 'auto' | 'light' | 'dark') => {
@@ -335,6 +367,46 @@ export function SettingsMenu() {
                     </button>
                   ))}
                   */}
+                </div>
+              )}
+            </div>
+
+            {/* Currency Selection */}
+            <div className="px-4 py-2 relative">
+              <button
+                onClick={toggleCurrencies}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-sm text-gray-900 dark:text-gray-100">Currency</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    {getCurrencyLabelText(currencySetting)}
+                  </span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform ${showCurrencies ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {showCurrencies && (
+                <div
+                  className="absolute left-0 right-0 top-full mt-1 mx-4 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-xl z-50 border border-gray-200 dark:border-gray-600"
+                >
+                  {(['auto', 'usd', 'eur'] as const).map(currency => (
+                    <button
+                      key={currency}
+                      onClick={() => handleCurrencySelect(currency)}
+                      className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-between"
+                    >
+                      <span>{getCurrencyOptionLabel(currency)}</span>
+                      {currencySetting === currency && <span className="text-cyan-500 dark:text-cyan-400">✓</span>}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

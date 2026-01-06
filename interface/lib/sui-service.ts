@@ -795,12 +795,61 @@ export async function executeZkLoginSponsoredTransaction(
   return { digest: result.digest };
 }
 
+// Execute a transaction with zkLogin (no sponsorship - user pays gas)
+export async function executeZkLoginTransaction(
+  tx: Transaction,
+  senderAddress: string
+): Promise<{ digest: string }> {
+  console.log('=== executeZkLoginTransaction START ===');
+  console.log('senderAddress:', senderAddress);
+
+  const { signTransactionWithZkLogin } = await import('@/lib/zklogin-utils');
+
+  const config = getSuiConfig();
+  const client = createSuiClient();
+  if (!client) throw new Error('Sui client not available');
+
+  // Set the sender (user pays gas)
+  tx.setSender(senderAddress);
+  tx.setGasBudget(50_000_000); // 0.05 SUI max gas
+
+  // Build the transaction
+  const txBytes = await tx.build({ client });
+  console.log('Transaction built, bytes length:', txBytes.length);
+
+  // Sign with zkLogin
+  const zkLoginSignature = await signTransactionWithZkLogin(txBytes);
+  console.log('zkLoginSignature:', zkLoginSignature.substring(0, 50) + '...');
+
+  // Execute transaction
+  const result = await client.executeTransactionBlock({
+    transactionBlock: txBytes,
+    signature: zkLoginSignature,
+    options: {
+      showEffects: true,
+    },
+  });
+
+  console.log('=== TRANSACTION SUCCESS ===');
+  console.log('Digest:', result.digest);
+  console.log('Effects status:', result.effects?.status);
+
+  return { digest: result.digest };
+}
+
 // Protocol statistics from blockchain
 export interface ProtocolStatsBlockchain {
   totalCampaigns: number;
   totalResponses: number;
   totalParticipants: number;
   activeCampaigns: number;
+}
+
+// Gas statistics from blockchain
+export interface ProtocolGasStats {
+  totalGasSpentOnCampaigns: number; // in SUI
+  totalGasSpentOnResponses: number; // in SUI
+  totalTransactions: number;
 }
 
 // Fetch protocol statistics from blockchain
@@ -883,6 +932,96 @@ export async function fetchProtocolStats(): Promise<ProtocolStatsBlockchain> {
   }
 }
 
+// Fetch protocol gas statistics from blockchain
+export async function fetchProtocolGasStats(): Promise<ProtocolGasStats> {
+  const client = createSuiClient();
+  const config = getSuiConfig();
+  if (!client || !config) {
+    return { totalGasSpentOnCampaigns: 0, totalGasSpentOnResponses: 0, totalTransactions: 0 };
+  }
+
+  try {
+    let totalGasSpentOnCampaigns = 0;
+    let totalGasSpentOnResponses = 0;
+    let totalTransactions = 0;
+    let cursor: string | null | undefined = undefined;
+    let hasMore = true;
+
+    // Query all transactions to the package
+    while (hasMore) {
+      const { data: txData, hasNextPage, nextCursor } = await client.queryTransactionBlocks({
+        filter: {
+          InputObject: config.packageId,
+        },
+        options: {
+          showInput: true,
+          showEffects: true,
+        },
+        limit: 50,
+        cursor,
+      });
+
+      for (const tx of txData) {
+        const inputs = tx.transaction?.data?.transaction;
+        if (!inputs || inputs.kind !== 'ProgrammableTransaction') continue;
+
+        // Look for calls to our package
+        let transactionType: 'campaign' | 'response' | null = null;
+
+        const packageCalls = inputs.transactions?.filter((t: any) => {
+          if (t.MoveCall) {
+            return t.MoveCall.package === config.packageId;
+          }
+          return false;
+        }) as any[];
+
+        for (const call of packageCalls || []) {
+          if (call.MoveCall) {
+            const fn = call.MoveCall.function;
+            if (fn === 'create_campaign') {
+              transactionType = 'campaign';
+              break;
+            } else if (fn === 'submit_response') {
+              transactionType = 'response';
+              break;
+            }
+          }
+        }
+
+        if (!transactionType) continue;
+
+        // Calculate gas cost
+        const gasUsed = tx.effects?.gasUsed;
+        const gasCost = gasUsed
+          ? (Number(gasUsed.computationCost) + Number(gasUsed.storageCost) - Number(gasUsed.storageRebate)) / 1_000_000_000
+          : 0;
+
+        if (transactionType === 'campaign') {
+          totalGasSpentOnCampaigns += Math.max(0, gasCost);
+        } else {
+          totalGasSpentOnResponses += Math.max(0, gasCost);
+        }
+        totalTransactions++;
+      }
+
+      hasMore = hasNextPage;
+      cursor = nextCursor;
+
+      // Safety limit to avoid infinite loops
+      if (totalTransactions > 10000) break;
+    }
+
+    return {
+      totalGasSpentOnCampaigns,
+      totalGasSpentOnResponses,
+      totalTransactions,
+    };
+  } catch (error) {
+    console.error('Error fetching protocol gas stats:', error);
+    return { totalGasSpentOnCampaigns: 0, totalGasSpentOnResponses: 0, totalTransactions: 0 };
+  }
+}
+
 // Sponsorship status
 export interface SponsorshipStatus {
   address: string;
@@ -905,6 +1044,58 @@ export async function getSponsorshipStatus(address: string): Promise<Sponsorship
   } catch (error) {
     console.error('Error getting sponsorship status:', error);
     return null;
+  }
+}
+
+// Fetch SUI balance for an address
+export async function fetchSuiBalance(address: string): Promise<string> {
+  const client = createSuiClient();
+  if (!client || !address) return '0';
+
+  try {
+    const balance = await client.getBalance({
+      owner: address,
+      coinType: '0x2::sui::SUI',
+    });
+    // Convert from MIST to SUI (1 SUI = 10^9 MIST)
+    const suiBalance = Number(balance.totalBalance) / 1_000_000_000;
+    return suiBalance.toFixed(4);
+  } catch (error) {
+    console.error('Error fetching SUI balance:', error);
+    return '0';
+  }
+}
+
+// Request test SUI from devnet/testnet faucet
+export async function requestFaucet(address: string): Promise<{ success: boolean; error?: string }> {
+  const dataSource = getDataSource();
+
+  if (dataSource !== 'devnet' && dataSource !== 'testnet') {
+    return { success: false, error: 'Faucet only available on devnet/testnet' };
+  }
+
+  const faucetUrl = dataSource === 'devnet'
+    ? 'https://faucet.devnet.sui.io/v2/gas'
+    : 'https://faucet.testnet.sui.io/v2/gas';
+
+  try {
+    const response = await fetch(faucetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        FixedAmountRequest: { recipient: address },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: errorText || 'Faucet request failed' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error requesting faucet:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
@@ -1012,5 +1203,190 @@ export async function fetchUserAccountStats(userAddress: string): Promise<UserAc
   } catch (error) {
     console.error('Error fetching user account stats:', error);
     return { campaignsCreated: 0, campaignsParticipated: 0, totalResponsesReceived: 0, firstActivityDate: null };
+  }
+}
+
+// User transaction for the Activity tab
+export interface UserTransaction {
+  digest: string;
+  timestamp: number;
+  type: 'create_campaign' | 'submit_response' | 'unknown';
+  campaignId?: string;
+  campaignTitle?: string;
+  gasCost: number; // in SUI
+  success: boolean;
+  gasPayedBy: 'user' | 'logbook' | string; // 'user' = self-paid, 'logbook' = our sponsor, or address of sponsor
+}
+
+// Known Logbook treasury/sponsor addresses (gas payers)
+const LOGBOOK_SPONSOR_ADDRESSES = [
+  '0xb6ec49cb872f3941b526e1281ebc1c9b9b91f848e20469a2ff77692d25f29134', // devnet treasury
+];
+
+// Fetch user's Logbook transactions
+export async function fetchUserTransactions(userAddress: string): Promise<UserTransaction[]> {
+  const client = createSuiClient();
+  const config = getSuiConfig();
+  if (!client || !config || !userAddress) {
+    return [];
+  }
+
+  try {
+    // Query transactions from this user to our package
+    const { data: txData } = await client.queryTransactionBlocks({
+      filter: {
+        FromAddress: userAddress,
+      },
+      options: {
+        showInput: true,
+        showEffects: true,
+        showEvents: true,
+      },
+      limit: 50,
+      order: 'descending',
+    });
+
+    const transactions: UserTransaction[] = [];
+
+    for (const tx of txData) {
+      // Check if this transaction calls our package
+      const inputs = tx.transaction?.data?.transaction;
+      if (!inputs || inputs.kind !== 'ProgrammableTransaction') continue;
+
+      // Look for calls to our package
+      const packageCalls = inputs.transactions?.filter((t: any) => {
+        if (t.MoveCall) {
+          return t.MoveCall.package === config.packageId;
+        }
+        return false;
+      }) as any[];
+
+      if (!packageCalls || packageCalls.length === 0) continue;
+
+      // Determine transaction type and extract campaign ID
+      let txType: UserTransaction['type'] = 'unknown';
+      let campaignId: string | undefined;
+
+      for (const call of packageCalls) {
+        if (call.MoveCall) {
+          const fn = call.MoveCall.function;
+          if (fn === 'create_campaign') {
+            txType = 'create_campaign';
+          } else if (fn === 'submit_response') {
+            txType = 'submit_response';
+            // For submit_response, the campaign ID is the first argument
+            // Arguments are references to inputs, we need to resolve them
+            const args = call.MoveCall.arguments;
+            if (args && args.length > 0) {
+              const firstArg = args[0];
+              // Check if it's an Input reference
+              if (firstArg && typeof firstArg === 'object' && 'Input' in firstArg) {
+                const inputIndex = firstArg.Input;
+                const txInputs = inputs.inputs;
+                if (txInputs && txInputs[inputIndex]) {
+                  const input = txInputs[inputIndex];
+                  // SharedObject type contains objectId
+                  if (input && typeof input === 'object' && 'Object' in input) {
+                    const objInput = input.Object as any;
+                    if (objInput && typeof objInput === 'object' && 'Shared' in objInput) {
+                      campaignId = objInput.Shared.objectId;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // For submit_response, also try to get campaignId from mutated objects
+      if (txType === 'submit_response' && !campaignId && tx.effects?.mutated) {
+        // The campaign object gets mutated when a response is submitted
+        // Look for a shared object that was mutated (campaign is shared)
+        for (const mutated of tx.effects.mutated) {
+          if (mutated.owner && typeof mutated.owner === 'object' && 'Shared' in mutated.owner) {
+            campaignId = mutated.reference?.objectId;
+            break;
+          }
+        }
+      }
+
+      // Get created campaign ID if it was a create_campaign tx
+      if (txType === 'create_campaign' && tx.effects?.created) {
+        const createdCampaign = tx.effects.created.find((obj: any) =>
+          obj.owner && typeof obj.owner === 'object' && 'Shared' in obj.owner
+        );
+        if (createdCampaign) {
+          campaignId = createdCampaign.reference?.objectId;
+        }
+      }
+
+      // Calculate gas cost
+      const gasUsed = tx.effects?.gasUsed;
+      const gasCost = gasUsed
+        ? (Number(gasUsed.computationCost) + Number(gasUsed.storageCost) - Number(gasUsed.storageRebate)) / 1_000_000_000
+        : 0;
+
+      // Determine who paid for gas
+      const gasOwner = tx.effects?.gasObject?.owner;
+      let gasPayedBy: UserTransaction['gasPayedBy'] = 'user';
+
+      if (gasOwner && typeof gasOwner === 'object' && 'AddressOwner' in gasOwner) {
+        const payerAddress = gasOwner.AddressOwner;
+        if (payerAddress !== userAddress) {
+          // Someone else paid - check if it's Logbook
+          if (LOGBOOK_SPONSOR_ADDRESSES.includes(payerAddress)) {
+            gasPayedBy = 'logbook';
+          } else {
+            gasPayedBy = payerAddress; // Other sponsor address
+          }
+        }
+      }
+
+      transactions.push({
+        digest: tx.digest,
+        timestamp: Number(tx.timestampMs || 0),
+        type: txType,
+        campaignId,
+        gasCost: Math.max(0, gasCost),
+        success: tx.effects?.status?.status === 'success',
+        gasPayedBy,
+      });
+    }
+
+    // Fetch campaign titles for all transactions that have campaignId
+    const campaignIds = [...new Set(transactions.filter(tx => tx.campaignId).map(tx => tx.campaignId!))];
+    if (campaignIds.length > 0) {
+      try {
+        const campaignObjects = await client.multiGetObjects({
+          ids: campaignIds,
+          options: { showContent: true },
+        });
+
+        const titleMap = new Map<string, string>();
+        for (const obj of campaignObjects) {
+          if (obj.data?.content && obj.data.content.dataType === 'moveObject') {
+            const fields = obj.data.content.fields as { title?: string };
+            if (fields.title) {
+              titleMap.set(obj.data.objectId, fields.title);
+            }
+          }
+        }
+
+        // Update transactions with campaign titles
+        for (const tx of transactions) {
+          if (tx.campaignId && titleMap.has(tx.campaignId)) {
+            tx.campaignTitle = titleMap.get(tx.campaignId);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching campaign titles:', error);
+      }
+    }
+
+    return transactions;
+  } catch (error) {
+    console.error('Error fetching user transactions:', error);
+    return [];
   }
 }

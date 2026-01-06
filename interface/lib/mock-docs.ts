@@ -78,7 +78,7 @@ Logbook solves these problems by recording every response on the Sui blockchain:
 ## Key Features
 
 - **Easy login**: Sign in with Google (zkLogin) or connect a crypto wallet
-- **Free to start**: Your first campaign and 5 responses are sponsored
+- **Free to start**: Your first 2 campaigns and 10 responses are sponsored
 - **Multiple question types**: Single choice, multiple choice, and text answers
 - **Real-time results**: See responses as they come in
 - **On-chain proof**: Every response has a verifiable transaction ID
@@ -236,7 +236,7 @@ For each question, you can mark it as required or optional and add as many answe
 2. Check that everything looks correct
 3. Click "Deploy Campaign"
 
-Your first campaign is free - we sponsor the blockchain transaction for you!
+Your first 2 campaigns are free - we sponsor the blockchain transaction for you!
 
 ## Step 5: Share Your Campaign
 
@@ -276,7 +276,11 @@ zkLogin is a technology developed by Mysten Labs that allows you to use your Goo
 - **No wallet needed**: Use your existing Google account
 - **No crypto knowledge required**: Works just like any other Google sign-in
 - **Secure**: Your Google password is never shared with Logbook
-- **Consistent address**: Your Google account always maps to the same blockchain address
+- **Consistent address**: Your Google account always maps to the same blockchain address within Logbook
+
+### Address Uniqueness
+
+Your zkLogin address is unique to each application. The same Google account will generate different blockchain addresses in different dApps. This is by design for privacy — different applications cannot link your accounts by comparing addresses.
 
 ### Privacy
 
@@ -324,39 +328,52 @@ Logbook sponsors your first interactions with the platform, so you can try it wi
 
 ## What's Included
 
-Every new user (identified by their blockchain address) gets:
+Every new campaign creator (identified by their blockchain address) gets:
 
-- **1 Free Campaign**: Your first campaign creation is fully sponsored
-- **5 Free Responses**: Your first 5 survey responses are sponsored
+- **2 Free Campaigns**: Your first 2 campaign creations are fully sponsored
+- **10 Free Responses**: Gas fees for the first 10 responses to your campaigns are sponsored
+
+## Important: Who Pays for What
+
+**Campaign creators** pay gas fees for:
+- Creating campaigns
+- Receiving responses to their campaigns
+
+**Participants never pay**. When someone responds to your campaign, the gas fee is charged to the campaign creator (or sponsored by Logbook if within free tier).
+
+This means:
+- Your participants can respond for free, even if they have no SUI tokens
+- You (as creator) use your free response quota when people respond to your campaigns
+- After your free tier is used, you'll need SUI tokens to receive more responses
 
 ## How It Works
 
-When you create a campaign or submit a response, the transaction requires a small "gas" fee to be processed by the blockchain. Normally, this would be paid from your wallet.
+When you create a campaign or when someone responds to your campaign, the transaction requires a small "gas" fee to be processed by the blockchain.
 
 With our sponsorship program:
-1. You initiate the transaction
+1. You create a campaign or a participant submits a response
 2. Our treasury account pays the gas fee on your behalf
 3. The transaction is processed as normal
 4. Your sponsored quota decreases by one
 
 ## Checking Your Quota
 
-You can see your remaining sponsored transactions on the account page. Once you've used your free quota:
-- You'll need a wallet with SUI tokens to create more campaigns
-- You'll need a wallet with SUI tokens to submit more responses
+You can see your remaining sponsored transactions on the [Account page → Free Tier tab](/account?tab=free-tier). Once you've used your free quota:
+- You'll need SUI tokens to create more campaigns
+- You'll need SUI tokens to receive more responses to your campaigns
 
 ## Getting SUI Tokens
 
 If you need SUI tokens after using your free tier:
 
-1. **Devnet (testing)**: Get free tokens from the Sui faucet
+1. **Devnet (testing)**: Use the "Get test SUI" button on the Account page
 2. **Mainnet**: Purchase SUI from exchanges and transfer to your wallet
 
 ## Why We Sponsor
 
 Blockchain transactions have costs, but we believe you should be able to try Logbook without any financial commitment. The free tier lets you:
 - Evaluate if Logbook fits your needs
-- Create a real campaign and collect responses
+- Create real campaigns and collect responses
 - Understand how blockchain-based surveys work
 
 Once you see the value, you can decide whether to continue with your own wallet.`,
@@ -544,7 +561,7 @@ For each question:
 
 Click "Submit Response" when you're done.
 
-If you have free sponsored responses remaining, submission is free. Otherwise, confirm the transaction in your wallet.
+Submitting responses is always free for participants — the campaign creator pays for the gas fees.
 
 ### Step 5: Confirmation
 
@@ -709,9 +726,9 @@ Enables gasless transactions for new users.
 4. Combined signatures execute transaction
 
 ### Limits
-- 1 campaign per address
-- 5 responses per address
-- Tracked per blockchain address
+- 2 campaigns per creator address
+- 10 responses to creator's campaigns
+- Tracked per campaign creator address
 
 ## Data Flow
 

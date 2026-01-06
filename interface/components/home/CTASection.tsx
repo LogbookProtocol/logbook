@@ -2,20 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getTransactionCostUsd } from '@/lib/sui-gas-price';
+import { getTransactionCost } from '@/lib/sui-gas-price';
 import { saveReferrer } from '@/lib/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export function CTASection() {
   const [txCost, setTxCost] = useState<string>('~$0.004');
   const router = useRouter();
   const { requireAuth } = useAuth();
+  const { currency, currencySymbol } = useCurrency();
 
   useEffect(() => {
-    getTransactionCostUsd().then(cost => {
-      setTxCost(`~$${cost.toFixed(3)}`);
+    getTransactionCost(currency).then(cost => {
+      setTxCost(`~${currencySymbol}${cost.toFixed(3)}`);
     });
-  }, []);
+  }, [currency, currencySymbol]);
 
   return (
     <section className="py-16 md:py-20 px-6">

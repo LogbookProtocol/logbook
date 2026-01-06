@@ -23,11 +23,14 @@ import {
 import { getDataSource, getSuiscanAccountUrl, getSuiscanTxUrl } from '@/lib/sui-config';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage, Language, LanguageSetting } from '@/contexts/LanguageContext';
-import { fetchUserAccountStats, getSponsorshipStatus, UserAccountStats, SponsorshipStatus } from '@/lib/sui-service';
+import { useCurrency, CurrencySetting } from '@/contexts/CurrencyContext';
+import { fetchUserAccountStats, getSponsorshipStatus, fetchSuiBalance, requestFaucet, fetchUserTransactions, UserAccountStats, SponsorshipStatus, UserTransaction } from '@/lib/sui-service';
+import { fetchSuiPrice } from '@/lib/sui-gas-price';
 import { useAuth } from '@/contexts/AuthContext';
+import { Currency } from '@/contexts/CurrencyContext';
 import { LastUpdated } from '@/components/LastUpdated';
 
-type TabType = 'overview' | 'settings';
+type TabType = 'overview' | 'free-tier' | 'settings';
 
 function AccountContent() {
   const searchParams = useSearchParams();
@@ -44,6 +47,7 @@ function AccountContent() {
   const [zkLoginEmail, setZkLoginEmail] = useState<string | null>(null);
   const [blockchainStats, setBlockchainStats] = useState<UserAccountStats | null>(null);
   const [sponsorshipStatus, setSponsorshipStatus] = useState<SponsorshipStatus | null>(null);
+  const [suiBalance, setSuiBalance] = useState<string>('0');
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
@@ -55,7 +59,7 @@ function AccountContent() {
   const isZkLogin = !account?.address && !!zkLoginAddress;
 
   useEffect(() => {
-    if (tabParam && ['overview', 'settings'].includes(tabParam)) {
+    if (tabParam && ['overview', 'free-tier', 'settings'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -76,12 +80,14 @@ function AccountContent() {
     if (!connectedAddress) return;
     if (showLoading) setIsLoading(true);
     try {
-      const [stats, sponsorship] = await Promise.all([
+      const [stats, sponsorship, balance] = await Promise.all([
         fetchUserAccountStats(connectedAddress),
         getSponsorshipStatus(connectedAddress),
+        fetchSuiBalance(connectedAddress),
       ]);
       setBlockchainStats(stats);
       setSponsorshipStatus(sponsorship);
+      setSuiBalance(balance);
       setLastUpdated(new Date());
     } catch (error) {
       console.error('Failed to fetch account data:', error);
@@ -148,10 +154,21 @@ function AccountContent() {
 
       {/* Header */}
       <div className="mb-8">
-        {/* Row 1: Title */}
-        <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent mb-2">Account</h1>
+        {/* Row 1: Title + Disconnect button */}
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent">Account</h1>
+          <button
+            onClick={handleDisconnect}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Disconnect
+          </button>
+        </div>
 
-        {/* Row 2: Icon + Address + copy + suiscan */}
+        {/* Row 2: Icon + Address + copy + Suiscan */}
         <div className="flex items-center gap-2 mb-2">
           {isZkLogin ? (
             <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -167,12 +184,12 @@ function AccountContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
             </svg>
           )}
-          <code className="text-sm text-gray-600 dark:text-gray-300">{shortAddress}</code>
           <button
             onClick={copyAddress}
-            className={`transition ${addressCopied ? 'text-green-500' : 'text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+            className={`flex items-center gap-1 transition ${addressCopied ? 'text-green-500' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}`}
             title={addressCopied ? 'Copied!' : 'Copy address'}
           >
+            <code className="text-sm">{shortAddress}</code>
             {addressCopied ? (
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -208,24 +225,36 @@ function AccountContent() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-8 border-b border-gray-200 dark:border-white/[0.06]">
-        {[
-          { id: 'overview', label: 'Overview' },
-          { id: 'settings', label: 'Settings' },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as TabType)}
-            className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
-              activeTab === tab.id
-                ? 'text-gray-900 dark:text-white border-cyan-500'
-                : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Tabs + LastUpdated */}
+      <div className="flex items-end justify-between mb-8 border-b border-gray-200 dark:border-white/[0.06]">
+        <div className="flex gap-2">
+          {[
+            { id: 'overview', label: 'Overview' },
+            { id: 'free-tier', label: 'Free Tier' },
+            { id: 'settings', label: 'Settings' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as TabType)}
+              className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? 'text-gray-900 dark:text-white border-cyan-500'
+                  : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {!isMock && (
+          <div className="pb-3">
+            <LastUpdated
+              lastUpdated={lastUpdated}
+              onRefresh={handleManualRefresh}
+              isLoading={isRefreshing}
+            />
+          </div>
+        )}
       </div>
 
       {/* Tab content */}
@@ -234,12 +263,16 @@ function AccountContent() {
           stats={stats}
           isMock={isMock}
           isLoading={isLoading}
-          sponsorshipStatus={sponsorshipStatus}
-          isZkLogin={isZkLogin}
-          onDisconnect={handleDisconnect}
-          lastUpdated={lastUpdated}
           onRefresh={handleManualRefresh}
-          isRefreshing={isRefreshing}
+          suiBalance={suiBalance}
+          connectedAddress={connectedAddress}
+        />
+      )}
+      {activeTab === 'free-tier' && (
+        <FreeTierTab
+          sponsorshipStatus={sponsorshipStatus}
+          isMock={isMock}
+          isLoading={isLoading}
         />
       )}
       {activeTab === 'settings' && (
@@ -255,58 +288,140 @@ function OverviewTab({
   stats,
   isMock,
   isLoading,
-  sponsorshipStatus,
-  isZkLogin,
-  onDisconnect,
-  lastUpdated,
   onRefresh,
-  isRefreshing,
+  suiBalance,
+  connectedAddress,
 }: {
   stats: { campaignsCreated: number; campaignsParticipated: number; totalResponses: number; memberSince: string };
   isMock: boolean;
   isLoading: boolean;
-  sponsorshipStatus: SponsorshipStatus | null;
-  isZkLogin: boolean;
-  onDisconnect: () => void;
-  lastUpdated: Date | null;
   onRefresh: () => void;
-  isRefreshing: boolean;
+  suiBalance: string;
+  connectedAddress: string | null;
 }) {
   const totalSpent = isMock ? getTotalSpentSui() : 0;
+  const [suiPrice, setSuiPrice] = useState<number | null>(null);
+  const [isFaucetLoading, setIsFaucetLoading] = useState(false);
+  const [faucetMessage, setFaucetMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [transactions, setTransactions] = useState<UserTransaction[]>([]);
+  const [isLoadingTxs, setIsLoadingTxs] = useState(true);
+  const { currency, currencySymbol } = useCurrency();
+
+  useEffect(() => {
+    fetchSuiPrice(currency).then(price => setSuiPrice(price)).catch(() => {});
+  }, [currency]);
+
+  // Fetch transactions
+  useEffect(() => {
+    if (!connectedAddress || isMock) {
+      setIsLoadingTxs(false);
+      return;
+    }
+
+    setIsLoadingTxs(true);
+    fetchUserTransactions(connectedAddress)
+      .then(txs => setTransactions(txs))
+      .finally(() => setIsLoadingTxs(false));
+  }, [connectedAddress, isMock]);
+
+  // Calculate gas statistics
+  const totalGasSpent = transactions.reduce((sum, tx) => sum + tx.gasCost, 0);
+  const userPaidGas = transactions.filter(tx => tx.gasPayedBy === 'user').reduce((sum, tx) => sum + tx.gasCost, 0);
+  const logbookPaidGas = transactions.filter(tx => tx.gasPayedBy === 'logbook').reduce((sum, tx) => sum + tx.gasCost, 0);
+
+  const totalGasFiat = suiPrice ? (totalGasSpent * suiPrice).toFixed(2) : null;
+  const userPaidFiat = suiPrice ? (userPaidGas * suiPrice).toFixed(2) : null;
+  const logbookPaidFiat = suiPrice ? (logbookPaidGas * suiPrice).toFixed(2) : null;
+
+  const handleFaucet = async () => {
+    if (!connectedAddress) return;
+    setIsFaucetLoading(true);
+    setFaucetMessage(null);
+    const result = await requestFaucet(connectedAddress);
+    setIsFaucetLoading(false);
+    if (result.success) {
+      setFaucetMessage({ type: 'success', text: 'SUI received! Refreshing balance...' });
+      setTimeout(() => {
+        onRefresh();
+        setFaucetMessage(null);
+      }, 2000);
+    } else {
+      setFaucetMessage({ type: 'error', text: result.error || 'Failed to request SUI' });
+    }
+  };
+
+  const balanceInFiat = suiPrice ? (parseFloat(suiBalance) * suiPrice).toFixed(2) : null;
 
   return (
     <div className="space-y-8">
 
-      {/* First activity */}
-      {stats.memberSince && (
-        <div className="text-sm text-gray-500 dark:text-gray-400">
-          First activity: {new Date(stats.memberSince).toLocaleDateString('en', { month: 'long', day: 'numeric', year: 'numeric' })}
-        </div>
+      {/* Assets */}
+      {!isMock && (
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Assets</h2>
+            <div className="flex items-center gap-3">
+              {faucetMessage && (
+                <span className={`text-sm ${faucetMessage.type === 'success' ? 'text-green-500' : 'text-red-500'}`}>
+                  {faucetMessage.text}
+                </span>
+              )}
+              <button
+                onClick={handleFaucet}
+                disabled={isFaucetLoading || !connectedAddress}
+                className="px-3 py-1.5 rounded-lg text-sm bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isFaucetLoading ? 'Requesting...' : 'Get test SUI'}
+              </button>
+            </div>
+          </div>
+          <div className="rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                  <th className="text-left text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Asset</th>
+                  <th className="text-right text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Balance</th>
+                  <th className="text-right text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center">
+                        <svg className="w-4 h-5" viewBox="0 0 29 36" fill="currentColor">
+                          <path className="text-cyan-500" fillRule="evenodd" clipRule="evenodd" d="M22.5363 15.0142L22.5357 15.0158C24.0044 16.8574 24.8821 19.1898 24.8821 21.7268C24.8821 24.3014 23.9781 26.6655 22.4698 28.5196L22.3399 28.6792L22.3055 28.4763C22.2762 28.3038 22.2418 28.1296 22.2018 27.954C21.447 24.6374 18.9876 21.7934 14.9397 19.4907C12.2063 17.9399 10.6417 16.0727 10.2309 13.9511C9.96558 12.5792 10.1628 11.2012 10.544 10.0209C10.9251 8.84103 11.4919 7.85247 11.9735 7.2573L11.9738 7.25692L13.5484 5.3315C13.8246 4.99384 14.3413 4.99384 14.6175 5.3315L22.5363 15.0142ZM25.0269 13.0906L25.0272 13.0898L14.4731 0.184802C14.2715 -0.0616007 13.8943 -0.0616009 13.6928 0.184802L3.1385 13.09L3.13878 13.0907L3.10444 13.1333C1.16226 15.5434 0 18.6061 0 21.9402C0 29.7051 6.30498 36 14.0829 36C21.8608 36 28.1658 29.7051 28.1658 21.9402C28.1658 18.6062 27.0035 15.5434 25.0614 13.1333L25.0269 13.0906ZM5.66381 14.9727L5.66423 14.9721L6.60825 13.8178L6.63678 14.0309C6.65938 14.1997 6.68678 14.3694 6.71928 14.5398C7.33009 17.7446 9.51208 20.4169 13.1602 22.4865C16.3312 24.2912 18.1775 26.3666 18.7095 28.6427C18.9314 29.5926 18.971 30.5272 18.8749 31.3443L18.8689 31.3948L18.8232 31.4172C17.3919 32.1164 15.783 32.5088 14.0826 32.5088C8.11832 32.5088 3.28308 27.6817 3.28308 21.7268C3.28308 19.1701 4.17443 16.8208 5.66381 14.9727Z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900 dark:text-white">SUI</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Sui</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <span className="font-medium text-gray-900 dark:text-white">{suiBalance}</span>
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {balanceInFiat ? `${currencySymbol}${balanceInFiat}` : '—'}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
-      {/* Quick stats */}
+      {/* Campaign Activity */}
       <section>
-        <div className="flex items-end justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Activity Summary</h2>
-          {!isMock && (
-            <LastUpdated
-              lastUpdated={lastUpdated}
-              onRefresh={onRefresh}
-              isLoading={isRefreshing}
-            />
-          )}
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Campaign Activity</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <StatCard
             value={stats.campaignsCreated}
             label="Campaigns Created"
             color="text-cyan-600 dark:text-cyan-400"
-            isLoading={isLoading}
-          />
-          <StatCard
-            value={stats.campaignsParticipated}
-            label="Participated In"
-            color="text-green-600 dark:text-green-400"
             isLoading={isLoading}
           />
           <StatCard
@@ -315,74 +430,12 @@ function OverviewTab({
             color="text-gray-900 dark:text-white"
             isLoading={isLoading}
           />
-          {isMock ? (
-            <StatCard
-              value={`${totalSpent.toFixed(2)} SUI`}
-              label="Total Gas Spent"
-              color="text-orange-600 dark:text-orange-400"
-              isLoading={isLoading}
-            />
-          ) : sponsorshipStatus ? (
-            <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {sponsorshipStatus.remaining.campaigns}/{sponsorshipStatus.limits.MAX_CAMPAIGNS}
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Free Campaigns Left</div>
-            </div>
-          ) : (
-            <StatCard
-              value="—"
-              label="Free Campaigns Left"
-              color="text-purple-600 dark:text-purple-400"
-              isLoading={isLoading}
-            />
-          )}
-        </div>
-      </section>
-
-      {/* Sponsorship status - only for non-mock */}
-      {!isMock && sponsorshipStatus && (
-        <section className="p-6 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
-          <h2 className="text-lg font-semibold text-cyan-600 dark:text-cyan-400 mb-4">Free Tier Status</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Campaigns</div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full"
-                    style={{ width: `${(sponsorshipStatus.used.campaigns / sponsorshipStatus.limits.MAX_CAMPAIGNS) * 100}%` }}
-                  />
-                </div>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {sponsorshipStatus.used.campaigns}/{sponsorshipStatus.limits.MAX_CAMPAIGNS}
-                </span>
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Responses</div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full"
-                    style={{ width: `${(sponsorshipStatus.used.responses / sponsorshipStatus.limits.MAX_RESPONSES) * 100}%` }}
-                  />
-                </div>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {sponsorshipStatus.used.responses}/{sponsorshipStatus.limits.MAX_RESPONSES}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Quick actions */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <ActionButton href="/campaigns/new" icon="+" label="New Campaign" />
-          <ActionButton href="/campaigns" icon="list" label="My Campaigns" />
+          <StatCard
+            value={stats.campaignsParticipated}
+            label="Participated In"
+            color="text-cyan-600 dark:text-cyan-400"
+            isLoading={isLoading}
+          />
         </div>
       </section>
 
@@ -398,21 +451,61 @@ function OverviewTab({
         </section>
       )}
 
-      {/* Disconnect */}
-      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-gray-900 dark:text-white">Disconnect {isZkLogin ? 'Account' : 'Wallet'}</div>
-            <div className="text-sm text-gray-400 dark:text-gray-500">Sign out from this session</div>
-          </div>
-          <button
-            onClick={onDisconnect}
-            className="px-4 py-2 rounded-lg border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 transition"
-          >
-            Disconnect
-          </button>
-        </div>
-      </section>
+      {/* Transactions Section - for blockchain data */}
+      {!isMock && (
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Transactions <span className="font-normal text-gray-500 dark:text-gray-400">(Logbook Smart Contract)</span></h2>
+
+          {/* Gas Statistics */}
+          {transactions.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+              <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {totalGasFiat ? `${currencySymbol}${totalGasFiat}` : `${totalGasSpent.toFixed(4)} SUI`}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Total Gas Used
+                  {totalGasFiat && <span className="text-gray-400"> ({totalGasSpent.toFixed(4)} SUI)</span>}
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {userPaidFiat ? `${currencySymbol}${userPaidFiat}` : `${userPaidGas.toFixed(4)} SUI`}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  You Paid
+                  {userPaidFiat && <span className="text-gray-400"> ({userPaidGas.toFixed(4)} SUI)</span>}
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+                <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+                  {logbookPaidFiat ? `${currencySymbol}${logbookPaidFiat}` : `${logbookPaidGas.toFixed(4)} SUI`}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Logbook Sponsored
+                  {logbookPaidFiat && <span className="text-gray-400"> ({logbookPaidGas.toFixed(4)} SUI)</span>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isLoadingTxs ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              Loading transactions...
+            </div>
+          ) : transactions.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              No Logbook transactions yet. Create a campaign or submit a response to get started.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {transactions.map(tx => (
+                <TransactionItem key={tx.digest} tx={tx} suiPrice={suiPrice} currencySymbol={currencySymbol} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
     </div>
   );
@@ -444,10 +537,251 @@ function StatCard({
   );
 }
 
+// Transaction item component (avoids nested <a> issue)
+function TransactionItem({ tx, suiPrice, currencySymbol }: { tx: UserTransaction; suiPrice: number | null; currencySymbol: string }) {
+  const router = useRouter();
+
+  const getGasPayerLabel = (gasPayedBy: UserTransaction['gasPayedBy']) => {
+    if (gasPayedBy === 'user') return null;
+    if (gasPayedBy === 'logbook') return 'Sponsored by Logbook';
+    return `Sponsored by ${gasPayedBy.slice(0, 6)}...${gasPayedBy.slice(-4)}`;
+  };
+
+  const getTransactionLabel = (type: UserTransaction['type']) => {
+    switch (type) {
+      case 'create_campaign': return 'Created Campaign';
+      case 'submit_response': return 'Submitted Response';
+      default: return 'Transaction';
+    }
+  };
+
+  const formatTimestamp = (ts: number) => {
+    if (!ts) return '—';
+    const date = new Date(ts);
+    return date.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' ' + date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleClick = () => {
+    if (tx.campaignId) {
+      router.push(`/campaigns/${tx.campaignId}`);
+    }
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      className={`p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] flex items-center gap-4 ${
+        tx.campaignId ? 'hover:border-cyan-500/50 hover:bg-gray-50 dark:hover:bg-white/[0.04] cursor-pointer' : ''
+      } transition`}
+    >
+      {/* Icon */}
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+        tx.type === 'create_campaign'
+          ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400'
+          : tx.type === 'submit_response'
+          ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400'
+          : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
+      }`}>
+        {tx.type === 'create_campaign' ? (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        ) : tx.type === 'submit_response' ? (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        )}
+      </div>
+
+      {/* Details */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-gray-900 dark:text-white">
+            {getTransactionLabel(tx.type)}
+          </span>
+          {!tx.success && (
+            <span className="px-1.5 py-0.5 text-xs rounded bg-red-500/10 text-red-600 dark:text-red-400">
+              Failed
+            </span>
+          )}
+          {tx.gasPayedBy !== 'user' && (
+            <span className="px-1.5 py-0.5 text-xs rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+              {getGasPayerLabel(tx.gasPayedBy)}
+            </span>
+          )}
+        </div>
+        {tx.campaignTitle && (
+          <div className="text-sm text-gray-600 dark:text-gray-300 truncate" title={tx.campaignTitle}>
+            {tx.campaignTitle}
+          </div>
+        )}
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {formatTimestamp(tx.timestamp)}
+        </div>
+      </div>
+
+      {/* Gas cost */}
+      <div className="text-right">
+        <div className={`text-sm ${tx.gasPayedBy === 'user' ? 'text-gray-600 dark:text-gray-300' : 'text-cyan-600 dark:text-cyan-400 line-through'}`}>
+          {suiPrice ? `-${currencySymbol}${(tx.gasCost * suiPrice).toFixed(4)}` : `-${tx.gasCost.toFixed(4)} SUI`}
+        </div>
+        {suiPrice && (
+          <div className="text-xs text-gray-400 dark:text-gray-500">
+            {tx.gasCost.toFixed(4)} SUI
+          </div>
+        )}
+      </div>
+
+      {/* Link to Suiscan */}
+      <a
+        href={getSuiscanTxUrl(tx.digest)}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+        title="View on Suiscan"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </a>
+    </div>
+  );
+}
+
+// Free Tier Tab
+function FreeTierTab({
+  sponsorshipStatus,
+  isMock,
+  isLoading,
+}: {
+  sponsorshipStatus: SponsorshipStatus | null;
+  isMock: boolean;
+  isLoading: boolean;
+}) {
+  if (isMock) {
+    return (
+      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+        Free Tier status is not available in mock mode. Connect to a network to see your sponsorship status.
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!sponsorshipStatus) {
+    return (
+      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+        Unable to load sponsorship status.
+      </div>
+    );
+  }
+
+  // Cap values to not exceed limits
+  const usedCampaigns = Math.min(sponsorshipStatus.used.campaigns, sponsorshipStatus.limits.MAX_CAMPAIGNS);
+  const usedResponses = Math.min(sponsorshipStatus.used.responses, sponsorshipStatus.limits.MAX_RESPONSES);
+  const remainingCampaigns = Math.max(0, sponsorshipStatus.limits.MAX_CAMPAIGNS - usedCampaigns);
+  const remainingResponses = Math.max(0, sponsorshipStatus.limits.MAX_RESPONSES - usedResponses);
+
+  return (
+    <div className="space-y-8">
+      {/* Overview cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+            {remainingCampaigns}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Free Campaigns Left</div>
+        </div>
+        <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+            {remainingResponses}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Free Responses Left</div>
+        </div>
+        <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">
+            {usedCampaigns}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Campaigns Used</div>
+        </div>
+        <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">
+            {usedResponses}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Responses Used</div>
+        </div>
+      </div>
+
+      {/* Progress bars */}
+      <section className="p-6 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
+        <h2 className="text-lg font-semibold text-cyan-600 dark:text-cyan-400 mb-4">Usage Progress</h2>
+        <div className="space-y-6">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Campaigns</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {usedCampaigns} of {sponsorshipStatus.limits.MAX_CAMPAIGNS} used
+              </span>
+            </div>
+            <div className="h-3 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-500"
+                style={{ width: `${(usedCampaigns / sponsorshipStatus.limits.MAX_CAMPAIGNS) * 100}%` }}
+              />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Responses</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {usedResponses} of {sponsorshipStatus.limits.MAX_RESPONSES} used
+              </span>
+            </div>
+            <div className="h-3 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-500"
+                style={{ width: `${(usedResponses / sponsorshipStatus.limits.MAX_RESPONSES) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Info */}
+      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">About Free Tier</h2>
+        <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+          <p>
+            Logbook sponsors gas fees for campaign creators to help them get started without needing SUI tokens. Each creator gets <span className="font-medium text-gray-900 dark:text-white">{sponsorshipStatus.limits.MAX_CAMPAIGNS} free campaigns</span> and <span className="font-medium text-gray-900 dark:text-white">{sponsorshipStatus.limits.MAX_RESPONSES} free responses</span> to their campaigns. Participants never pay — gas fees for responses are covered by the campaign creator. After using your free tier, you&apos;ll need SUI tokens to pay for transaction gas fees.
+          </p>
+          <p>
+            <Link href="/docs?doc=free-tier" className="text-cyan-600 dark:text-cyan-400 hover:underline">
+              Learn more in documentation →
+            </Link>
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // Settings Tab
 function SettingsTab() {
   const { themeMode, setThemeMode } = useTheme();
   const { languageSetting, setLanguage, t } = useLanguage();
+  const { currencySetting, setCurrency, currencySymbol: settingsCurrencySymbol } = useCurrency();
 
   // Date format settings
   const [dateFormat, setDateFormatState] = useState<DateFormat>('auto');
@@ -477,6 +811,14 @@ function SettingsTab() {
       case 'auto': return 'Auto';
       case 'light': return 'Light';
       case 'dark': return 'Dark';
+    }
+  };
+
+  const getCurrencyButtonLabel = (currency: CurrencySetting) => {
+    switch (currency) {
+      case 'auto': return `Auto (${settingsCurrencySymbol})`;
+      case 'usd': return 'USD ($)';
+      case 'eur': return 'EUR (€)';
     }
   };
 
@@ -614,6 +956,26 @@ function SettingsTab() {
             </div>
           </div>
           */}
+        </div>
+      </section>
+
+      {/* Currency */}
+      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Currency</h2>
+        <div className="flex flex-wrap gap-2">
+          {(['auto', 'usd', 'eur'] as const).map(currency => (
+            <button
+              key={currency}
+              onClick={() => setCurrency(currency)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                currencySetting === currency
+                  ? 'bg-gray-200 dark:bg-white/15 text-gray-900 dark:text-white'
+                  : 'bg-transparent text-gray-500 dark:text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              {getCurrencyButtonLabel(currency)}
+            </button>
+          ))}
         </div>
       </section>
 

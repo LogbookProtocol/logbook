@@ -14,7 +14,7 @@ export function HeroSection() {
   return (
     <section
       className="flex items-center justify-center relative overflow-visible"
-      style={{ minHeight: isMobile ? 'calc(100svh - 56px - 64px)' : 'calc(100vh - 56px)' }}
+      style={{ minHeight: isMobile ? 'calc(100svh - 56px - 28px - 64px)' : 'calc(100vh - 56px - 28px)' }}
     >
       <FloatingBlocks />
 
