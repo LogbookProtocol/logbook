@@ -25,19 +25,23 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
     return () => setMounted(false);
   }, []);
 
-  // Загружаем последний использованный кошелек при открытии модала
+  // Загружаем последний использованный кошелек и сохраняем текущий URL при открытии модала
   useEffect(() => {
     if (open) {
       const lastWallet = localStorage.getItem('last_used_wallet');
       setLastUsedWallet(lastWallet);
       console.log('Last used wallet from localStorage:', lastWallet);
+
+      // Save current URL when modal opens (so we return here after login)
+      const currentUrl = window.location.pathname + window.location.search;
+      sessionStorage.setItem('zklogin_return_url', currentUrl);
     }
   }, [open]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && open) {
-        onOpenChange(false);
+        handleClose();
       }
     };
 
@@ -45,23 +49,18 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
       document.addEventListener('keydown', handleEscape);
       return () => document.removeEventListener('keydown', handleEscape);
     }
-  }, [open, onOpenChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  // Clear return URL when modal is closed without successful auth
-  useEffect(() => {
-    if (!open && !isLoadingGoogle) {
-      // Modal was closed and we're not redirecting to Google OAuth
-      sessionStorage.removeItem('zklogin_return_url');
-    }
-  }, [open, isLoadingGoogle]);
+  // Handle modal close - clear return URL only if user explicitly closes without logging in
+  const handleClose = () => {
+    sessionStorage.removeItem('zklogin_return_url');
+    onOpenChange(false);
+  };
 
   const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
     try {
-      // Save current page to return after login (only if not already set by requireAuth)
-      if (!sessionStorage.getItem('zklogin_return_url')) {
-        sessionStorage.setItem('zklogin_return_url', window.location.pathname + window.location.search);
-      }
       // Save scroll position to restore after login
       sessionStorage.setItem('zklogin_scroll_position', String(window.scrollY));
       const authUrl = await getZkLoginUrl('google');
@@ -126,7 +125,7 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
       {/* Backdrop - полный экран */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]"
-        onClick={() => onOpenChange(false)}
+        onClick={handleClose}
       />
 
       {/* Modal Container - полный экран с центрированием */}
@@ -145,7 +144,7 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
               Choose your connection method
             </p>
             <button
-              onClick={() => onOpenChange(false)}
+              onClick={handleClose}
               className="absolute top-4 right-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
               aria-label="Close"
             >

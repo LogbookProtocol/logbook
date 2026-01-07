@@ -21,6 +21,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getReferrer, saveReferrer } from '@/lib/navigation';
 import { useCopyLink } from '@/hooks/useCopyLink';
 import { LastUpdated } from '@/components/LastUpdated';
+import {
+  decryptCampaignData,
+  decryptData,
+  getStoredPassword,
+  storePassword,
+  removeStoredPassword,
+  isValidPassword,
+} from '@/lib/crypto';
 
 type TabType = 'overview' | 'results' | 'responses';
 
@@ -42,9 +50,17 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
 
   // Load zkLogin address and referrer from localStorage/sessionStorage
   useEffect(() => {
-    const address = localStorage.getItem('zklogin_address');
-    setZkLoginAddress(address);
+    const loadZkLoginAddress = () => {
+      const address = localStorage.getItem('zklogin_address');
+      setZkLoginAddress(address);
+    };
+
+    loadZkLoginAddress();
     setBackLink(getReferrer('/campaigns'));
+
+    // Listen for zklogin-changed event (fired when user logs out)
+    window.addEventListener('zklogin-changed', loadZkLoginAddress);
+    return () => window.removeEventListener('zklogin-changed', loadZkLoginAddress);
   }, []);
 
   // Get connected address (from wallet or zkLogin)
@@ -60,6 +76,17 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // Encrypted campaign state
+  const [isLocked, setIsLocked] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isDecrypting, setIsDecrypting] = useState(false);
+  const [decryptedCampaign, setDecryptedCampaign] = useState<CampaignDetails | null>(null);
+  const [includePasswordInLink, setIncludePasswordInLink] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
+  const [decryptedResults, setDecryptedResults] = useState<QuestionResult[]>([]);
+
   // Sync tab with URL param when navigating between campaigns
   useEffect(() => {
     setActiveTab(initialTab || 'overview');
@@ -71,6 +98,19 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     window.addEventListener('date-format-changed', handleDateFormatChange);
     return () => window.removeEventListener('date-format-changed', handleDateFormatChange);
   }, []);
+
+  // Load and persist includePasswordInLink setting
+  useEffect(() => {
+    const stored = localStorage.getItem(`campaign_include_password_${id}`);
+    if (stored !== null) {
+      setIncludePasswordInLink(stored === 'true');
+    }
+  }, [id]);
+
+  const handleIncludePasswordChange = (checked: boolean) => {
+    setIncludePasswordInLink(checked);
+    localStorage.setItem(`campaign_include_password_${id}`, String(checked));
+  };
 
   // Fetch campaign data from blockchain
   const fetchData = useCallback(async (showLoading = true) => {
@@ -115,6 +155,119 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     }
   }, [fetchData]);
 
+  // Handle encrypted campaign decryption
+  useEffect(() => {
+    if (!blockchainCampaign?.isEncrypted) {
+      setIsLocked(false);
+      setDecryptedCampaign(null);
+      return;
+    }
+
+    const tryDecrypt = async (password: string) => {
+      try {
+        const decryptedData = await decryptCampaignData(
+          {
+            title: blockchainCampaign.title,
+            description: blockchainCampaign.description,
+            questions: blockchainCampaign.questions.map(q => ({
+              text: q.question,
+              options: q.options?.map(o => o.label) || [],
+            })),
+          },
+          password
+        );
+
+        // Create decrypted campaign object
+        const decrypted: CampaignDetails = {
+          ...blockchainCampaign,
+          title: decryptedData.title,
+          description: decryptedData.description,
+          questions: blockchainCampaign.questions.map((q, i) => ({
+            ...q,
+            question: decryptedData.questions[i].text,
+            options: q.options?.map((o, j) => ({
+              ...o,
+              label: decryptedData.questions[i].options[j] || o.label,
+            })),
+          })),
+        };
+
+        setDecryptedCampaign(decrypted);
+        setIsLocked(false);
+        storePassword(id, password, connectedAddress);
+      } catch {
+        setIsLocked(true);
+      }
+    };
+
+    // Check URL param first
+    const keyParam = searchParams.get('key');
+    if (keyParam && isValidPassword(keyParam)) {
+      tryDecrypt(keyParam);
+      return;
+    }
+
+    // Check localStorage
+    const storedPassword = getStoredPassword(id, connectedAddress);
+    if (storedPassword && isValidPassword(storedPassword)) {
+      tryDecrypt(storedPassword);
+      return;
+    }
+
+    // No password found, show locked state
+    setIsLocked(true);
+  }, [blockchainCampaign, id, searchParams, connectedAddress]);
+
+  // Handle unlock button click
+  const handleUnlock = async () => {
+    if (!passwordInput.trim()) {
+      setPasswordError('Please enter a password');
+      return;
+    }
+
+    setIsDecrypting(true);
+    setPasswordError(null);
+
+    try {
+      if (!blockchainCampaign) return;
+
+      const decryptedData = await decryptCampaignData(
+        {
+          title: blockchainCampaign.title,
+          description: blockchainCampaign.description,
+          questions: blockchainCampaign.questions.map(q => ({
+            text: q.question,
+            options: q.options?.map(o => o.label) || [],
+          })),
+        },
+        passwordInput
+      );
+
+      // Create decrypted campaign object
+      const decrypted: CampaignDetails = {
+        ...blockchainCampaign,
+        title: decryptedData.title,
+        description: decryptedData.description,
+        questions: blockchainCampaign.questions.map((q, i) => ({
+          ...q,
+          question: decryptedData.questions[i].text,
+          options: q.options?.map((o, j) => ({
+            ...o,
+            label: decryptedData.questions[i].options[j] || o.label,
+          })),
+        })),
+      };
+
+      setDecryptedCampaign(decrypted);
+      setIsLocked(false);
+      storePassword(id, passwordInput, connectedAddress);
+    } catch {
+      setPasswordError('Incorrect password');
+    } finally {
+      setIsDecrypting(false);
+    }
+  };
+
   // Set up polling only for active campaigns
   useEffect(() => {
     if (dataSource === 'mock') return;
@@ -126,12 +279,101 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     return () => clearInterval(interval);
   }, [dataSource, blockchainCampaign, fetchData]);
 
-  // Get campaign - from blockchain or mock data
-  const campaign = dataSource !== 'mock' ? blockchainCampaign : getCampaignById(id);
+  // Redirect to campaigns list when user logs out while viewing encrypted campaign
+  useEffect(() => {
+    // Only apply to encrypted campaigns that have been unlocked
+    if (!blockchainCampaign?.isEncrypted || isLocked) return;
+
+    // If there's no connected address, user has logged out
+    if (!connectedAddress) {
+      router.push('/campaigns');
+    }
+  }, [blockchainCampaign?.isEncrypted, isLocked, connectedAddress, router]);
+
+  // Decrypt results for encrypted campaigns
+  useEffect(() => {
+    const decryptResultsData = async () => {
+      if (!blockchainCampaign?.isEncrypted || blockchainResults.length === 0) {
+        setDecryptedResults([]);
+        return;
+      }
+
+      const password = getStoredPassword(id, connectedAddress);
+      if (!password) {
+        setDecryptedResults([]);
+        return;
+      }
+
+      try {
+        const decrypted = await Promise.all(
+          blockchainResults.map(async (q) => {
+            // Decrypt question text
+            let decryptedQuestion = q.question;
+            try {
+              decryptedQuestion = await decryptData(q.question, password);
+            } catch {
+              // Keep original if decryption fails
+            }
+
+            // Decrypt option labels for choice questions
+            let decryptedResultsArray = q.results;
+            if (q.results && q.results.length > 0) {
+              decryptedResultsArray = await Promise.all(
+                q.results.map(async (option) => {
+                  try {
+                    const decryptedLabel = await decryptData(option.label, password);
+                    return { ...option, label: decryptedLabel };
+                  } catch {
+                    return option; // Keep original if decryption fails
+                  }
+                })
+              );
+            }
+
+            // Decrypt text responses
+            let decryptedTextResponses = q.textResponses;
+            if (q.type === 'text' && q.textResponses) {
+              decryptedTextResponses = await Promise.all(
+                q.textResponses.map(async (response) => {
+                  try {
+                    const decryptedText = await decryptData(response.text, password);
+                    return { ...response, text: decryptedText };
+                  } catch {
+                    return response; // Keep original if decryption fails
+                  }
+                })
+              );
+            }
+
+            return {
+              ...q,
+              question: decryptedQuestion,
+              results: decryptedResultsArray,
+              textResponses: decryptedTextResponses,
+            };
+          })
+        );
+        setDecryptedResults(decrypted);
+      } catch {
+        setDecryptedResults([]);
+      }
+    };
+
+    decryptResultsData();
+  }, [blockchainCampaign?.isEncrypted, blockchainResults, id, connectedAddress]);
+
+  // Get campaign - from blockchain (decrypted if available) or mock data
+  const rawCampaign = dataSource !== 'mock' ? blockchainCampaign : getCampaignById(id);
+  const campaign = decryptedCampaign || rawCampaign;
+  // Use decrypted results for encrypted campaigns, otherwise use raw blockchain results
+  const resultsQuestions = blockchainCampaign?.isEncrypted && decryptedResults.length > 0
+    ? decryptedResults
+    : blockchainResults;
+
   const results = dataSource !== 'mock' ? {
     totalResponses: campaign?.stats.responses || 0,
     completionRate: 100,
-    questions: blockchainResults,
+    questions: resultsQuestions,
     finalizedOnChain: campaign?.status === 'ended',
     finalizationTx: '',
   } : mockCampaignResults;
@@ -156,6 +398,109 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
         <Link href="/campaigns" className="text-cyan-600 dark:text-cyan-400 hover:underline">
           ← Back to campaigns
         </Link>
+      </div>
+    );
+  }
+
+  // Handle locked encrypted campaign
+  if (isLocked && rawCampaign?.isEncrypted) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-24">
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+            <svg className="w-10 h-10 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Password Protected Campaign
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400">
+            This campaign is encrypted. Enter the password to view its content.
+          </p>
+        </div>
+
+        {/* Campaign metadata (unencrypted) */}
+        <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] mb-6">
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Created by</span>
+              <span className="text-gray-700 dark:text-gray-300 font-mono">
+                {rawCampaign.creator.address.slice(0, 6)}...{rawCampaign.creator.address.slice(-4)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Created</span>
+              <span className="text-gray-700 dark:text-gray-300">{formatDate(rawCampaign.dates.created)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Responses</span>
+              <span className="text-gray-700 dark:text-gray-300">{rawCampaign.stats.responses}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Status</span>
+              <span className={rawCampaign.status === 'active' ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}>
+                {CAMPAIGN_STATUSES[rawCampaign.status].label}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Password input */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Campaign Password
+          </label>
+          <input
+            type="text"
+            value={passwordInput}
+            onChange={(e) => {
+              setPasswordInput(e.target.value);
+              setPasswordError(null);
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+            className={`w-full px-4 py-3 bg-white dark:bg-gray-800 border rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition font-mono ${
+              passwordError
+                ? 'border-red-500 dark:border-red-500'
+                : 'border-gray-300 dark:border-gray-600'
+            }`}
+            placeholder="Enter password"
+          />
+          {passwordError && (
+            <p className="mt-2 text-sm text-red-600 dark:text-red-400">{passwordError}</p>
+          )}
+        </div>
+
+        {/* Unlock button */}
+        <button
+          onClick={handleUnlock}
+          disabled={isDecrypting}
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {isDecrypting ? (
+            <>
+              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Unlocking...
+            </>
+          ) : (
+            <>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              Unlock Campaign
+            </>
+          )}
+        </button>
+
+        {/* Back link */}
+        <div className="mt-6 text-center">
+          <Link href="/campaigns" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition text-sm">
+            ← Back to campaigns
+          </Link>
+        </div>
       </div>
     );
   }
@@ -195,6 +540,20 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2 flex-wrap">
+              {/* Campaign type icon */}
+              {campaign.isEncrypted ? (
+                <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0" title="Password Protected">
+                  <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center flex-shrink-0" title="Open Campaign">
+                  <svg className="w-4 h-4 text-cyan-600 dark:text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+              )}
               <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">{campaign.title}</h1>
               <span
                 className={`px-3 py-1 rounded-full text-sm ${
@@ -205,31 +564,6 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
               >
                 {statusInfo.label}
               </span>
-              <button
-                onClick={() => copyLink(campaign.id)}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm transition ${
-                  isCopied(campaign.id)
-                    ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                    : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10'
-                }`}
-                title={isCopied(campaign.id) ? 'Copied!' : 'Copy link'}
-              >
-                {isCopied(campaign.id) ? (
-                  <>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                    <span>Copy link</span>
-                  </>
-                )}
-              </button>
             </div>
 
             <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
@@ -247,14 +581,14 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                   router.push(targetPath);
                 }
               }}
-              className="px-6 py-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition"
+              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-medium hover:opacity-90 transition"
             >
               Participate
             </button>
           )}
           {campaign.status === 'active' && hasParticipated && (
-            <div className="px-6 py-3 rounded-lg bg-green-500/20 text-green-600 dark:text-green-400 font-medium flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="px-4 py-2 rounded-lg bg-green-500/20 text-green-600 dark:text-green-400 font-medium flex items-center gap-2 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               You have participated
@@ -356,14 +690,107 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
             </div>
           </section>
 
-          {/* Share (for creators) */}
-          {isCreator && (
-            <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Share Campaign</h2>
+          {/* Share Campaign */}
+          <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Share Campaign</h2>
+
+              {/* Password management for encrypted campaigns */}
+              {campaign.isEncrypted && getStoredPassword(id, connectedAddress) && (
+                <div className="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  {/* Password field */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-amber-700 dark:text-amber-400 mb-2">
+                      Campaign Password
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={getStoredPassword(id, connectedAddress) || ''}
+                          readOnly
+                          className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-700 rounded-lg text-gray-900 dark:text-gray-100 font-mono text-sm pr-10"
+                        />
+                        <button
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                          title={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showPassword ? (
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const password = getStoredPassword(id, connectedAddress);
+                          if (password) {
+                            navigator.clipboard.writeText(password);
+                            setPasswordCopied(true);
+                            setTimeout(() => setPasswordCopied(false), 2000);
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition ${
+                          passwordCopied
+                            ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
+                            : 'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/20'
+                        }`}
+                        title="Copy password"
+                      >
+                        {passwordCopied ? (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                        {passwordCopied ? 'Copied' : 'Copy'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          removeStoredPassword(id, connectedAddress);
+                          window.location.reload();
+                        }}
+                        className="px-3 py-2 rounded-lg bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-500/30 transition"
+                        title="Forget password"
+                      >
+                        Forget
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Include password in link toggle */}
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includePasswordInLink}
+                      onChange={(e) => handleIncludePasswordChange(e.target.checked)}
+                      className="w-4 h-4 text-amber-500 border-amber-300 rounded focus:ring-amber-500"
+                    />
+                    <span className="text-sm text-amber-700 dark:text-amber-400">
+                      Include password in link and QR code
+                    </span>
+                  </label>
+                  {includePasswordInLink && (
+                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
+                      Anyone with the link or QR code will be able to access the campaign without entering a password.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Hidden QR for canvas operations */}
               <img
                 id="campaign-qr-code"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/campaigns/${campaign.id}`)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/campaigns/${campaign.id}${includePasswordInLink && campaign.isEncrypted ? `?key=${getStoredPassword(campaign.id, connectedAddress) || ''}` : ''}`)}`}
                 alt="Campaign QR Code"
                 className="hidden"
                 crossOrigin="anonymous"
@@ -371,7 +798,10 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
               <div className="flex flex-wrap gap-3">
                 {/* Copy Link */}
                 <button
-                  onClick={() => copyLink(campaign.id)}
+                  onClick={() => {
+                    const password = includePasswordInLink && campaign.isEncrypted ? getStoredPassword(campaign.id, connectedAddress) : null;
+                    copyLink(campaign.id, undefined, password || undefined);
+                  }}
                   className={`px-4 py-2 rounded-lg transition text-sm font-medium flex items-center gap-2 ${
                     isCopied(campaign.id)
                       ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
@@ -458,8 +888,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                   Download QR
                 </button>
               </div>
-            </section>
-          )}
+          </section>
 
           {/* On-chain info */}
           <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">

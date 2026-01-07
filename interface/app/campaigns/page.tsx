@@ -20,6 +20,7 @@ import { fetchCampaignsByCreator, fetchParticipatedCampaigns, ParticipatedCampai
 import { useAuth } from '@/contexts/AuthContext';
 import { saveReferrer } from '@/lib/navigation';
 import { LastUpdated } from '@/components/LastUpdated';
+import { getStoredPassword, decryptData } from '@/lib/crypto';
 
 type TabType = 'created' | 'participated';
 
@@ -40,6 +41,9 @@ function CampaignsContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Decrypted campaign data cache: campaignId -> { title, description }
+  const [decryptedCache, setDecryptedCache] = useState<Record<string, { title: string; description: string }>>({});
 
   // zkLogin address from localStorage
   const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
@@ -140,6 +144,45 @@ function CampaignsContent() {
     }
   }, [connectedAddress, fetchData]);
 
+  // Try to decrypt encrypted campaigns when we have stored passwords
+  useEffect(() => {
+    const decryptEncryptedCampaigns = async () => {
+      // Combine all encrypted campaigns from both lists
+      const allCampaigns = [
+        ...blockchainCampaigns.filter(c => c.isEncrypted),
+        ...participatedCampaigns.filter(c => c.isEncrypted),
+      ];
+
+      if (allCampaigns.length === 0) return;
+
+      const newDecrypted: Record<string, { title: string; description: string }> = {};
+
+      for (const campaign of allCampaigns) {
+        // Skip if already decrypted
+        if (decryptedCache[campaign.id]) continue;
+
+        const password = getStoredPassword(campaign.id, connectedAddress);
+        if (!password) continue;
+
+        try {
+          const [title, description] = await Promise.all([
+            decryptData(campaign.title, password),
+            decryptData(campaign.description, password),
+          ]);
+          newDecrypted[campaign.id] = { title, description };
+        } catch {
+          // Decryption failed - password might be wrong, ignore
+        }
+      }
+
+      if (Object.keys(newDecrypted).length > 0) {
+        setDecryptedCache(prev => ({ ...prev, ...newDecrypted }));
+      }
+    };
+
+    decryptEncryptedCampaigns();
+  }, [blockchainCampaigns, participatedCampaigns, decryptedCache, connectedAddress]);
+
   // Convert CampaignDetails to PortfolioCampaign format
   const convertToPortfolioCampaign = (c: CampaignDetails): PortfolioCampaign => ({
     id: c.id,
@@ -149,6 +192,7 @@ function CampaignsContent() {
     endDate: c.dates.endDate,
     responsesCount: c.stats.responses,
     createdAt: c.dates.created,
+    isEncrypted: c.isEncrypted,
   });
 
   // Check if wallet is connected (for non-mock mode)
@@ -172,6 +216,7 @@ function CampaignsContent() {
     endDate: c.dates.endDate,
     respondedAt: c.respondedAt,
     createdAt: c.dates.created,
+    isEncrypted: c.isEncrypted,
   });
 
   // Get campaigns based on active tab
@@ -265,7 +310,7 @@ function CampaignsContent() {
               router.push(targetPath);
             }
           }}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition"
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-medium hover:opacity-90 transition"
         >
           New Campaign
         </button>
@@ -289,13 +334,6 @@ function CampaignsContent() {
           Participated
         </TabButton>
         </div>
-        {dataSource !== 'mock' && connectedAddress && (
-          <LastUpdated
-            lastUpdated={lastUpdated}
-            onRefresh={handleManualRefresh}
-            isLoading={isRefreshing}
-          />
-        )}
       </div>
 
       {/* Stats */}
@@ -315,25 +353,34 @@ function CampaignsContent() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        <FilterButton
-          active={!statusFilter}
-          onClick={() => setStatusFilter(null)}
-        >
-          All
-        </FilterButton>
-        <FilterButton
-          active={statusFilter === 'active'}
-          onClick={() => setStatusFilter('active')}
-        >
-          Active
-        </FilterButton>
-        <FilterButton
-          active={statusFilter === 'ended'}
-          onClick={() => setStatusFilter('ended')}
-        >
-          Ended
-        </FilterButton>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+        <div className="flex flex-wrap gap-2">
+          <FilterButton
+            active={!statusFilter}
+            onClick={() => setStatusFilter(null)}
+          >
+            All
+          </FilterButton>
+          <FilterButton
+            active={statusFilter === 'active'}
+            onClick={() => setStatusFilter('active')}
+          >
+            Active
+          </FilterButton>
+          <FilterButton
+            active={statusFilter === 'ended'}
+            onClick={() => setStatusFilter('ended')}
+          >
+            Ended
+          </FilterButton>
+        </div>
+        {dataSource !== 'mock' && connectedAddress && (
+          <LastUpdated
+            lastUpdated={lastUpdated}
+            onRefresh={handleManualRefresh}
+            isLoading={isRefreshing}
+          />
+        )}
       </div>
 
       {/* Campaign list */}
@@ -348,9 +395,9 @@ function CampaignsContent() {
         ) : (
           filteredCampaigns.map(campaign => (
             activeTab === 'participated' ? (
-              <ParticipatingCard key={campaign.id} campaign={campaign as ActivityCampaign} copyLink={copyLink} isCopied={isCopied} />
+              <ParticipatingCard key={campaign.id} campaign={campaign as ActivityCampaign} copyLink={copyLink} isCopied={isCopied} decrypted={decryptedCache[campaign.id]} />
             ) : (
-              <CreatedCard key={campaign.id} campaign={campaign as PortfolioCampaign} copyLink={copyLink} isCopied={isCopied} />
+              <CreatedCard key={campaign.id} campaign={campaign as PortfolioCampaign} copyLink={copyLink} isCopied={isCopied} decrypted={decryptedCache[campaign.id]} />
             )
           ))
         )}
@@ -361,7 +408,7 @@ function CampaignsContent() {
         <div className="text-center py-12">
           <div className="text-gray-500 dark:text-gray-500 mb-4">
             {isWalletRequired && !isWalletConnected ? (
-              "Please connect your wallet to view your campaigns"
+              "Please log in to view your campaigns"
             ) : activeTab === 'created' ? (
               "You haven't created any campaigns yet"
             ) : (
@@ -472,14 +519,47 @@ function StatCard({
   );
 }
 
+// Campaign type icon component
+function CampaignTypeIcon({ isEncrypted }: { isEncrypted?: boolean }) {
+  if (isEncrypted) {
+    return (
+      <div
+        className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center"
+        title="Password Protected"
+      >
+        <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex-shrink-0 w-10 h-10 rounded-full bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center"
+      title="Open Campaign"
+    >
+      <svg className="w-5 h-5 text-cyan-600 dark:text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+      </svg>
+    </div>
+  );
+}
+
 // Card for "Created" tab
-function CreatedCard({ campaign, copyLink, isCopied }: {
+function CreatedCard({ campaign, copyLink, isCopied, decrypted }: {
   campaign: PortfolioCampaign;
   copyLink: (id: string, e?: React.MouseEvent) => void;
   isCopied: (id: string) => boolean;
+  decrypted?: { title: string; description: string };
 }) {
   const statusInfo = CAMPAIGN_STATUSES[campaign.status];
   const mainLink = `/campaigns/${campaign.id}`;
+
+  // For encrypted campaigns without decrypted data, show placeholder
+  const isEncryptedLocked = campaign.isEncrypted && !decrypted;
+  const displayTitle = isEncryptedLocked ? 'Encrypted Campaign' : (decrypted?.title ?? campaign.title);
+  const displayDescription = isEncryptedLocked ? 'Password required to view content' : (decrypted?.description ?? campaign.description);
 
   return (
     <Link
@@ -488,10 +568,13 @@ function CreatedCard({ campaign, copyLink, isCopied }: {
       className="block p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-cyan-500/50 transition"
     >
       <div className="flex items-start justify-between gap-4">
+        {/* Campaign Type Icon */}
+        <CampaignTypeIcon isEncrypted={campaign.isEncrypted} />
+
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-2">
             <span className="text-lg font-semibold text-gray-900 dark:text-white truncate">
-              {campaign.title}
+              {displayTitle}
             </span>
             <span className={`px-2 py-0.5 rounded-full text-xs ${
               campaign.status === 'active' ? 'bg-green-500/20 text-green-600 dark:text-green-400' :
@@ -501,7 +584,7 @@ function CreatedCard({ campaign, copyLink, isCopied }: {
             </span>
           </div>
 
-          <p className="text-gray-600 dark:text-gray-400 text-sm mb-3 line-clamp-1">{campaign.description}</p>
+          <p className="text-sm mb-3 line-clamp-1 text-gray-600 dark:text-gray-400">{displayDescription}</p>
 
           <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-500">
             {campaign.endDate && (
@@ -548,18 +631,27 @@ function CreatedCard({ campaign, copyLink, isCopied }: {
 }
 
 // Card for "Participated" tab
-function ParticipatingCard({ campaign, copyLink, isCopied }: {
+function ParticipatingCard({ campaign, copyLink, isCopied, decrypted }: {
   campaign: ActivityCampaign;
   copyLink: (id: string, e?: React.MouseEvent) => void;
   isCopied: (id: string) => boolean;
+  decrypted?: { title: string; description: string };
 }) {
   const statusInfo = CAMPAIGN_STATUSES[campaign.status];
   const mainLink = `/campaigns/${campaign.id}`;
   const resultsLink = `/campaigns/${campaign.id}?tab=results`;
 
+  // For encrypted campaigns without decrypted data, show placeholder
+  const isEncryptedLocked = campaign.isEncrypted && !decrypted;
+  const displayTitle = isEncryptedLocked ? 'Encrypted Campaign' : (decrypted?.title ?? campaign.title);
+  const displayDescription = isEncryptedLocked ? 'Password required to view content' : (decrypted?.description ?? campaign.description);
+
   return (
     <div className="block p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-cyan-500/50 transition">
       <div className="flex items-start justify-between gap-4">
+        {/* Campaign Type Icon */}
+        <CampaignTypeIcon isEncrypted={campaign.isEncrypted} />
+
         <Link
           href={mainLink}
           onClick={() => saveReferrer(mainLink)}
@@ -567,7 +659,7 @@ function ParticipatingCard({ campaign, copyLink, isCopied }: {
         >
           <div className="flex items-center gap-3 mb-2 flex-wrap">
             <span className="text-lg font-semibold text-gray-900 dark:text-white truncate">
-              {campaign.title}
+              {displayTitle}
             </span>
             <span className={`px-2 py-0.5 rounded-full text-xs ${
               campaign.status === 'active' ? 'bg-green-500/20 text-green-600 dark:text-green-400' :
@@ -577,7 +669,7 @@ function ParticipatingCard({ campaign, copyLink, isCopied }: {
             </span>
           </div>
 
-          <p className="text-gray-600 dark:text-gray-400 text-sm mb-3 line-clamp-1">{campaign.description}</p>
+          <p className="text-sm mb-3 line-clamp-1 text-gray-600 dark:text-gray-400">{displayDescription}</p>
 
           <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-500 flex-wrap">
             <ClientDate dateString={campaign.respondedAt} prefix="Responded: " />

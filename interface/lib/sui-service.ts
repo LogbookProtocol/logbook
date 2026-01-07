@@ -62,6 +62,7 @@ interface BlockchainCampaign {
   created_at: string;
   end_time: string;
   is_finalized: boolean;
+  is_encrypted: boolean;
 }
 
 // Convert blockchain campaign to frontend format
@@ -92,6 +93,7 @@ function convertCampaign(data: BlockchainCampaign, objectId: string): CampaignDe
     title: data.title,
     description: data.description,
     status,
+    isEncrypted: data.is_encrypted,
     creator: {
       address: data.creator,
       name: null,
@@ -551,7 +553,8 @@ export function buildCreateCampaignTx(
     required: boolean;
     answers: Array<{ text: string }>;
   }>,
-  endTime: number // Unix timestamp in milliseconds
+  endTime: number, // Unix timestamp in milliseconds
+  isEncrypted: boolean = false
 ): Transaction | null {
   const config = getSuiConfig();
   if (!config) return null;
@@ -588,6 +591,7 @@ export function buildCreateCampaignTx(
     allOptions,
     optionsPerQuestion,
     accessType: 0,
+    isEncrypted,
     endTime: `${endTime} (${new Date(endTime).toISOString()})`,
     clock: '0x6',
   });
@@ -604,8 +608,9 @@ export function buildCreateCampaignTx(
       tx.pure.vector('string', allOptions),    // 6: Flattened answer options
       tx.pure.vector('u64', optionsPerQuestion), // 7: Options count per question
       tx.pure.u8(0),                           // 8: Access type (0=public)
-      tx.pure.u64(endTime),                    // 9: End time (ms timestamp)
-      tx.object('0x6'),                        // 10: Sui System Clock
+      tx.pure.bool(isEncrypted),               // 9: Is encrypted flag
+      tx.pure.u64(endTime),                    // 10: End time (ms timestamp)
+      tx.object('0x6'),                        // 11: Sui System Clock
     ],
   });
 

@@ -1,16 +1,18 @@
 import { create } from 'zustand';
-import { CampaignStore, CampaignFormData, Question } from '@/types/campaign';
+import { CampaignStore, CampaignFormData, Question, CampaignAccessMode } from '@/types/campaign';
 
 const initialFormData: CampaignFormData = {
   title: '',
   description: '',
   endDate: '',
   questions: [],
+  accessMode: 'open',
 };
 
 export const useCampaignStore = create<CampaignStore>((set) => ({
   formData: initialFormData,
   isReviewMode: false,
+  generatedPassword: null,
 
   updateFormData: (data: Partial<CampaignFormData>) =>
     set((state) => ({
@@ -56,5 +58,17 @@ export const useCampaignStore = create<CampaignStore>((set) => ({
 
   setReviewMode: (isReview: boolean) => set({ isReviewMode: isReview }),
 
-  resetForm: () => set({ formData: initialFormData, isReviewMode: false }),
+  setAccessMode: (mode: CampaignAccessMode) =>
+    set((state) => ({
+      formData: {
+        ...state.formData,
+        accessMode: mode,
+      },
+    })),
+
+  setGeneratedPassword: (password: string | null) =>
+    set({ generatedPassword: password }),
+
+  resetForm: () =>
+    set({ formData: initialFormData, isReviewMode: false, generatedPassword: null }),
 }));

@@ -1,5 +1,7 @@
 export type QuestionType = 'single_choice' | 'multiple_choice' | 'text_input';
 
+export type CampaignAccessMode = 'open' | 'password_protected';
+
 export interface AnswerOption {
   id: string;
   text: string;
@@ -18,11 +20,13 @@ export interface CampaignFormData {
   description: string;
   endDate: string;
   questions: Question[];
+  accessMode: CampaignAccessMode;
 }
 
 export interface CampaignStore {
   formData: CampaignFormData;
   isReviewMode: boolean;
+  generatedPassword: string | null;
 
   updateFormData: (data: Partial<CampaignFormData>) => void;
   addQuestion: (question: Question) => void;
@@ -30,5 +34,7 @@ export interface CampaignStore {
   deleteQuestion: (id: string) => void;
   reorderQuestions: (questions: Question[]) => void;
   setReviewMode: (isReview: boolean) => void;
+  setAccessMode: (mode: CampaignAccessMode) => void;
+  setGeneratedPassword: (password: string | null) => void;
   resetForm: () => void;
 }

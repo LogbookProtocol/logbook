@@ -61,6 +61,7 @@ module logbook::logbook {
         created_at: u64,
         end_time: u64,  // Unix timestamp in milliseconds
         is_finalized: bool,
+        is_encrypted: bool,  // True if campaign data is encrypted
     }
 
     // Registry to track all campaigns by creator
@@ -93,6 +94,7 @@ module logbook::logbook {
         // Number of options per question: [2, 3, ...] means q1 has 2 options, q2 has 3
         options_per_question: vector<u64>,
         access_type: u8,
+        is_encrypted: bool,
         end_time: u64,
         clock: &Clock,
         ctx: &mut TxContext
@@ -157,6 +159,7 @@ module logbook::logbook {
             created_at: clock.timestamp_ms(),
             end_time,
             is_finalized: false,
+            is_encrypted,
         };
 
         let campaign_id = object::id(&campaign);
@@ -350,6 +353,7 @@ module logbook::logbook {
     public fun get_created_at(campaign: &Campaign): u64 { campaign.created_at }
     public fun get_end_time(campaign: &Campaign): u64 { campaign.end_time }
     public fun get_is_finalized(campaign: &Campaign): bool { campaign.is_finalized }
+    public fun get_is_encrypted(campaign: &Campaign): bool { campaign.is_encrypted }
 
     public fun has_participated(campaign: &Campaign, addr: address): bool {
         campaign.participants.contains(&addr)

@@ -393,3 +393,75 @@ export function clearZkLoginSession() {
   sessionStorage.removeItem(EPHEMERAL_MAX_EPOCH);
   sessionStorage.removeItem(EPHEMERAL_RANDOMNESS);
 }
+
+/**
+ * Error types for zkLogin
+ */
+export type ZkLoginErrorType = 'session_expired' | 'session_invalid' | 'network_error' | 'unknown';
+
+export interface ZkLoginErrorInfo {
+  type: ZkLoginErrorType;
+  message: string;
+  actionRequired: 'relogin' | 'retry' | 'none';
+}
+
+/**
+ * Parses zkLogin errors and returns structured error information
+ */
+export function parseZkLoginError(error: unknown): ZkLoginErrorInfo {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  // Check for epoch expiration error
+  if (errorMessage.includes('ZKLogin expired at epoch') ||
+      errorMessage.includes('expired at epoch')) {
+    // Extract epochs from message like "ZKLogin expired at epoch 27, current epoch 28"
+    const match = errorMessage.match(/expired at epoch (\d+), current epoch (\d+)/);
+    const expiredEpoch = match ? match[1] : '?';
+    const currentEpoch = match ? match[2] : '?';
+
+    return {
+      type: 'session_expired',
+      message: `Your session has expired (epoch ${expiredEpoch} → ${currentEpoch}). Please sign in again with Google to continue.`,
+      actionRequired: 'relogin',
+    };
+  }
+
+  // Check for invalid signature
+  if (errorMessage.includes('Invalid user signature') ||
+      errorMessage.includes('Signature is not valid')) {
+    return {
+      type: 'session_expired',
+      message: 'Your session is no longer valid. Please sign in again with Google.',
+      actionRequired: 'relogin',
+    };
+  }
+
+  // Check for missing session data
+  if (errorMessage.includes('Missing ephemeral key') ||
+      errorMessage.includes('No JWT token found') ||
+      errorMessage.includes('re-login with Google')) {
+    return {
+      type: 'session_invalid',
+      message: 'Session data is missing. Please sign in again with Google.',
+      actionRequired: 'relogin',
+    };
+  }
+
+  // Check for network errors
+  if (errorMessage.includes('Failed to fetch') ||
+      errorMessage.includes('network') ||
+      errorMessage.includes('timeout')) {
+    return {
+      type: 'network_error',
+      message: 'Network error. Please check your connection and try again.',
+      actionRequired: 'retry',
+    };
+  }
+
+  // Default unknown error
+  return {
+    type: 'unknown',
+    message: errorMessage || 'An unexpected error occurred.',
+    actionRequired: 'none',
+  };
+}

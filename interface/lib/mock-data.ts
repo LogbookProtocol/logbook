@@ -15,6 +15,7 @@ export interface PortfolioCampaign {
   endDate: string;
   responsesCount: number;
   createdAt: string;
+  isEncrypted?: boolean;
 }
 
 // Activity campaign (campaigns user has responded to)
@@ -26,6 +27,7 @@ export interface ActivityCampaign {
   endDate: string;
   respondedAt: string;
   createdAt?: string;
+  isEncrypted?: boolean;
 }
 
 // Campaigns created by user (for Portfolio)
@@ -128,6 +130,7 @@ export interface CampaignDetails {
   title: string;
   description: string;
   status: CampaignStatus;
+  isEncrypted: boolean;
   creator: {
     address: string;
     name: string | null;
@@ -168,6 +171,7 @@ export const mockActiveCampaign: CampaignDetails = {
 Your vote matters! All token holders are eligible to participate.`,
 
   status: 'active',
+  isEncrypted: false,
 
   creator: {
     address: '0x456...def',
@@ -247,6 +251,7 @@ export const mockEndedCampaign: CampaignDetails = {
 This vote has concluded. Thank you to everyone who participated!`,
 
   status: 'ended',
+  isEncrypted: false,
 
   creator: {
     address: '0x456...def',
@@ -306,6 +311,7 @@ export const mockCampaignDetailsMap: Record<string, CampaignDetails> = {
 
 Help us decide where to focus our engineering resources!`,
     status: 'active',
+    isEncrypted: false,
     creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
     dates: { created: '2025-01-10T00:00:00Z', endDate: '2025-02-15T23:59:59Z' },
     stats: { responses: 234 },
@@ -364,6 +370,7 @@ Help us decide where to focus our engineering resources!`,
 
 Your responses are completely anonymous.`,
     status: 'active',
+    isEncrypted: false,
     creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
     dates: { created: '2025-01-05T00:00:00Z', endDate: '2025-01-31T23:59:59Z' },
     stats: { responses: 8 },
@@ -398,6 +405,7 @@ Your responses are completely anonymous.`,
 
 Each vote counts equally.`,
     status: 'active',
+    isEncrypted: false,
     creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
     dates: { created: '2025-01-12T00:00:00Z', endDate: '2025-02-10T23:59:59Z' },
     stats: { responses: 45 },
@@ -425,6 +433,7 @@ Each vote counts equally.`,
 
 This survey has concluded. Thank you to all participants!`,
     status: 'ended',
+    isEncrypted: false,
     creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
     dates: { created: '2024-11-25T00:00:00Z', endDate: '2024-12-20T23:59:59Z' },
     stats: { responses: 45 },
@@ -459,6 +468,7 @@ This survey has concluded. Thank you to all participants!`,
 
 This vote has concluded. Thank you to everyone who participated!`,
     status: 'ended',
+    isEncrypted: false,
     creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
     dates: { created: '2024-10-10T00:00:00Z', endDate: '2024-10-25T23:59:59Z' },
     stats: { responses: 127 },
@@ -497,6 +507,7 @@ This vote has concluded. Thank you to everyone who participated!`,
 
 Share your thoughts on the new dashboard.`,
     status: 'active',
+    isEncrypted: false,
     creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
     dates: { created: '2025-01-14T00:00:00Z', endDate: '2025-03-01T23:59:59Z' },
     stats: { responses: 12 },
@@ -531,6 +542,7 @@ Share your thoughts on the new dashboard.`,
 
 Your feedback will directly influence event planning!`,
     status: 'active',
+    isEncrypted: false,
     creator: { address: '0x789abcdef1234567890abcdef1234567890abc', name: 'ETH Denver DAO', avatar: null },
     dates: { created: '2025-01-05T00:00:00Z', endDate: '2025-02-20T23:59:59Z' },
     stats: { responses: 312 },
@@ -565,6 +577,7 @@ Your feedback will directly influence event planning!`,
 
 This vote has concluded.`,
     status: 'ended',
+    isEncrypted: false,
     creator: { address: '0xabcdef1234567890abcdef1234567890789', name: 'Protocol Foundation', avatar: null },
     dates: { created: '2024-12-01T00:00:00Z', endDate: '2024-12-15T23:59:59Z' },
     stats: { responses: 567 },
@@ -590,6 +603,7 @@ This vote has concluded.`,
 
 This survey has concluded.`,
     status: 'ended',
+    isEncrypted: false,
     creator: { address: '0xdef1234567890abcdef1234567890012', name: 'Community Team', avatar: null },
     dates: { created: '2024-11-15T00:00:00Z', endDate: '2024-11-30T23:59:59Z' },
     stats: { responses: 89 },
@@ -616,6 +630,7 @@ This survey has concluded.`,
 
 This survey has concluded.`,
     status: 'ended',
+    isEncrypted: false,
     creator: { address: '0x3456789abcdef1234567890abcdef1234567890678', name: 'Product Team', avatar: null },
     dates: { created: '2024-09-15T00:00:00Z', endDate: '2024-10-01T23:59:59Z' },
     stats: { responses: 156 },

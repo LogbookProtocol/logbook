@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
 import { useCampaignStore } from '@/store/campaignStore';
-import { Question, QuestionType, AnswerOption } from '@/types/campaign';
+import { Question, QuestionType, AnswerOption, CampaignAccessMode } from '@/types/campaign';
 import { formatDate, getEndTimeDisplay, localDateToEndOfDayUTC } from '@/lib/format-date';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { getDataSource } from '@/lib/sui-config';
@@ -13,6 +13,14 @@ import { buildCreateCampaignTx, executeZkLoginSponsoredTransaction, executeZkLog
 import { getReferrer } from '@/lib/navigation';
 import { getTransactionCost, fetchSuiPrice } from '@/lib/sui-gas-price';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import {
+  generateCampaignPassword,
+  encryptCampaignData,
+  storePassword,
+  generatePasswordFileContent,
+} from '@/lib/crypto';
+import { parseZkLoginError, ZkLoginErrorInfo } from '@/lib/zklogin-utils';
+import { ZkLoginErrorAlert } from '@/components/ZkLoginErrorAlert';
 
 export default function NewCampaignPage() {
   const router = useRouter();
@@ -22,16 +30,20 @@ export default function NewCampaignPage() {
   const {
     formData,
     isReviewMode,
+    generatedPassword,
     updateFormData,
     addQuestion,
     updateQuestion,
     deleteQuestion,
     setReviewMode,
+    setAccessMode,
+    setGeneratedPassword,
     resetForm,
   } = useCampaignStore();
 
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
+  const [zkLoginError, setZkLoginError] = useState<ZkLoginErrorInfo | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [, forceUpdate] = useState(0);
   const [backLink, setBackLink] = useState('/campaigns');
@@ -39,6 +51,11 @@ export default function NewCampaignPage() {
   const [txCostFiat, setTxCostFiat] = useState<number>(0);
   const [suiPrice, setSuiPrice] = useState<number>(0);
   const { currency, currencySymbol } = useCurrency();
+
+  // Password modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
 
   // Get referrer on client side
   useEffect(() => {
@@ -118,17 +135,54 @@ export default function NewCampaignPage() {
       const endTimeUtc = localDateToEndOfDayUTC(formData.endDate);
       const endTime = new Date(endTimeUtc).getTime();
 
-      // Build the transaction
-      const tx = buildCreateCampaignTx(
-        formData.title,
-        formData.description,
-        formData.questions.map(q => ({
-          text: q.text,
+      const isEncrypted = formData.accessMode === 'password_protected';
+      let title = formData.title;
+      let description = formData.description;
+      let questions = formData.questions.map(q => ({
+        text: q.text,
+        type: q.type,
+        required: q.required,
+        answers: q.answers,
+      }));
+      let password: string | null = null;
+
+      // If password protected, encrypt the data
+      if (isEncrypted) {
+        password = generateCampaignPassword();
+        setGeneratedPassword(password);
+
+        const encryptedData = await encryptCampaignData(
+          {
+            title: formData.title,
+            description: formData.description,
+            questions: formData.questions.map(q => ({
+              text: q.text,
+              options: q.answers.map(a => a.text),
+            })),
+          },
+          password
+        );
+
+        title = encryptedData.title;
+        description = encryptedData.description;
+        questions = formData.questions.map((q, i) => ({
+          text: encryptedData.questions[i].text,
           type: q.type,
           required: q.required,
-          answers: q.answers,
-        })),
-        endTime
+          answers: q.answers.map((a, j) => ({
+            ...a,
+            text: encryptedData.questions[i].options[j] || a.text,
+          })),
+        }));
+      }
+
+      // Build the transaction
+      const tx = buildCreateCampaignTx(
+        title,
+        description,
+        questions,
+        endTime,
+        isEncrypted
       );
 
       if (!tx) {
@@ -137,6 +191,27 @@ export default function NewCampaignPage() {
         return;
       }
 
+      // Helper function to handle successful deployment
+      const connectedAddress = zkLoginAddress || account?.address;
+      const handleDeploySuccess = (campaignId: string | null) => {
+        if (isEncrypted && password) {
+          // Store password and show modal
+          if (campaignId) {
+            storePassword(campaignId, password, connectedAddress);
+          }
+          setCreatedCampaignId(campaignId);
+          setShowPasswordModal(true);
+          setIsDeploying(false);
+        } else {
+          resetForm();
+          if (campaignId) {
+            router.push(`/campaigns/${campaignId}`);
+          } else {
+            router.push('/campaigns');
+          }
+        }
+      };
+
       // Use zkLogin transaction for Google users
       if (zkLoginAddress) {
         try {
@@ -144,25 +219,38 @@ export default function NewCampaignPage() {
           if (canUseSponsorship) {
             const result = await executeZkLoginSponsoredTransaction(tx, zkLoginAddress);
             console.log('Campaign deployed with sponsorship:', result.digest);
-            resetForm();
-            router.push('/campaigns');
+            // For zkLogin, we need to fetch the created campaign ID from the transaction
+            // This is a simplified approach - for now we'll just redirect
+            handleDeploySuccess(null);
             return;
           }
 
           // Fall back to non-sponsored zkLogin (user pays gas)
           const result = await executeZkLoginTransaction(tx, zkLoginAddress);
           console.log('Campaign deployed with zkLogin (user paid gas):', result.digest);
-          resetForm();
-          router.push('/campaigns');
+          handleDeploySuccess(null);
         } catch (error) {
           const err = error as Error & { code?: string };
           console.error('zkLogin deploy failed:', error);
-          if (err.code === 'CAMPAIGN_LIMIT_REACHED') {
+
+          // Check if this is a zkLogin session error
+          const errorMessage = err.message || String(error);
+          if (errorMessage.includes('ZKLogin') ||
+              errorMessage.includes('expired at epoch') ||
+              errorMessage.includes('Invalid user signature') ||
+              errorMessage.includes('Signature is not valid')) {
+            const parsedError = parseZkLoginError(error);
+            setZkLoginError(parsedError);
+            setDeployError(null);
+          } else if (err.code === 'CAMPAIGN_LIMIT_REACHED') {
             setDeployError('Sponsored campaign limit reached. You need SUI balance to create more campaigns.');
-          } else if (err.message?.includes('Insufficient gas')) {
+            setZkLoginError(null);
+          } else if (errorMessage.includes('Insufficient gas')) {
             setDeployError('Insufficient SUI balance. Get test SUI from the faucet in Account page.');
+            setZkLoginError(null);
           } else {
-            setDeployError(err.message || 'Failed to deploy campaign');
+            setDeployError(errorMessage || 'Failed to deploy campaign');
+            setZkLoginError(null);
           }
           setIsDeploying(false);
         }
@@ -175,7 +263,6 @@ export default function NewCampaignPage() {
         {
           onSuccess: (result) => {
             console.log('Campaign deployed:', result);
-            resetForm();
 
             // Try to extract the created campaign object ID from the result
             // The result contains objectChanges with created objects
@@ -184,13 +271,8 @@ export default function NewCampaignPage() {
                 (change) => change.type === 'created' && change.objectType?.includes('::logbook::Campaign')
               );
 
-            if (createdObjects && createdObjects.length > 0 && createdObjects[0].objectId) {
-              // Redirect to the created campaign page
-              router.push(`/campaigns/${createdObjects[0].objectId}`);
-            } else {
-              // Fallback to campaigns list
-              router.push('/campaigns');
-            }
+            const campaignId = createdObjects && createdObjects.length > 0 ? createdObjects[0].objectId : null;
+            handleDeploySuccess(campaignId || null);
           },
           onError: (error) => {
             console.error('Deploy failed:', error);
@@ -288,8 +370,16 @@ export default function NewCampaignPage() {
           </div>
         </div>
 
-        {/* Error message */}
-        {deployError && (
+        {/* zkLogin Error with relogin button */}
+        {zkLoginError && (
+          <ZkLoginErrorAlert
+            error={zkLoginError}
+            onDismiss={() => setZkLoginError(null)}
+          />
+        )}
+
+        {/* Regular error message */}
+        {deployError && !zkLoginError && (
           <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 mb-6">
             <p className="text-red-600 dark:text-red-400 text-sm">{deployError}</p>
           </div>
@@ -328,6 +418,45 @@ export default function NewCampaignPage() {
   // Edit Mode
   return (
     <div className="max-w-2xl mx-auto px-6 py-12">
+      {/* Password Modal */}
+      {showPasswordModal && generatedPassword && (
+        <PasswordSuccessModal
+          password={generatedPassword}
+          campaignId={createdCampaignId}
+          campaignTitle={formData.title}
+          passwordCopied={passwordCopied}
+          onCopy={() => {
+            navigator.clipboard.writeText(generatedPassword);
+            setPasswordCopied(true);
+            setTimeout(() => setPasswordCopied(false), 2000);
+          }}
+          onDownload={() => {
+            const content = generatePasswordFileContent(
+              generatedPassword,
+              formData.title,
+              createdCampaignId || 'unknown',
+              new Date()
+            );
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `logbook-campaign-password-${createdCampaignId?.slice(0, 8) || 'new'}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          onContinue={() => {
+            setShowPasswordModal(false);
+            resetForm();
+            if (createdCampaignId) {
+              router.push(`/campaigns/${createdCampaignId}`);
+            } else {
+              router.push('/campaigns');
+            }
+          }}
+        />
+      )}
+
       {/* Header */}
       <div className="mb-8">
         <Link
@@ -338,6 +467,12 @@ export default function NewCampaignPage() {
         </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">New Campaign</h1>
       </div>
+
+      {/* Campaign Type Selector */}
+      <CampaignTypeSelector
+        accessMode={formData.accessMode}
+        onSelect={setAccessMode}
+      />
 
       {/* Campaign Info */}
       <div className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] mb-6">
@@ -663,6 +798,176 @@ function GasCostCalculator({
         ) : (
           <span className="text-sm text-gray-400 dark:text-gray-500 ml-auto">—</span>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Campaign Type Selector Component
+function CampaignTypeSelector({
+  accessMode,
+  onSelect,
+}: {
+  accessMode: CampaignAccessMode;
+  onSelect: (mode: CampaignAccessMode) => void;
+}) {
+  return (
+    <div className="mb-6">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+        Campaign Type
+      </label>
+      <div className="grid grid-cols-2 gap-4">
+        {/* Open Campaign */}
+        <button
+          type="button"
+          onClick={() => onSelect('open')}
+          className={`p-4 rounded-xl border-2 transition text-left ${
+            accessMode === 'open'
+              ? 'border-cyan-500 bg-cyan-500/5'
+              : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
+          }`}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <svg className="w-5 h-5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            <span className={`font-medium ${accessMode === 'open' ? 'text-cyan-600 dark:text-cyan-400' : 'text-gray-900 dark:text-white'}`}>
+              Open
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Anyone with the link can view and participate
+          </p>
+        </button>
+
+        {/* Password Protected */}
+        <button
+          type="button"
+          onClick={() => onSelect('password_protected')}
+          className={`p-4 rounded-xl border-2 transition text-left ${
+            accessMode === 'password_protected'
+              ? 'border-cyan-500 bg-cyan-500/5'
+              : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
+          }`}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span className={`font-medium ${accessMode === 'password_protected' ? 'text-cyan-600 dark:text-cyan-400' : 'text-gray-900 dark:text-white'}`}>
+              Password Protected
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            End-to-end encrypted, password required
+          </p>
+        </button>
+      </div>
+
+      {accessMode === 'password_protected' && (
+        <p className="mt-3 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2">
+          <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          A password will be generated after deployment. Store it safely — it cannot be recovered.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Password Success Modal Component
+function PasswordSuccessModal({
+  password,
+  campaignId,
+  campaignTitle,
+  passwordCopied,
+  onCopy,
+  onDownload,
+  onContinue,
+}: {
+  password: string;
+  campaignId: string | null;
+  campaignTitle: string;
+  passwordCopied: boolean;
+  onCopy: () => void;
+  onDownload: () => void;
+  onContinue: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md p-6 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 shadow-xl">
+        {/* Success Icon */}
+        <div className="flex justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        </div>
+
+        <h2 className="text-xl font-bold text-center text-gray-900 dark:text-white mb-2">
+          Campaign Created!
+        </h2>
+        <p className="text-center text-gray-500 dark:text-gray-400 text-sm mb-6">
+          Your password-protected campaign has been deployed. Save this password — you'll need it to access the campaign.
+        </p>
+
+        {/* Password Display */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Campaign Password
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              readOnly
+              value={password}
+              className="w-full px-4 py-3 pr-24 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 font-mono text-sm"
+            />
+            <button
+              onClick={onCopy}
+              className={`absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                passwordCopied
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                  : 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-200 dark:hover:bg-cyan-900/50'
+              }`}
+            >
+              {passwordCopied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+        </div>
+
+        {/* Download Button */}
+        <button
+          onClick={onDownload}
+          className="w-full py-3 mb-4 rounded-xl border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition font-medium flex items-center justify-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download Password File
+        </button>
+
+        {/* Warning */}
+        <div className="mb-6 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
+            <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>
+              <strong>Important:</strong> This password cannot be recovered if lost. Without it, the campaign data will be permanently inaccessible.
+            </span>
+          </p>
+        </div>
+
+        {/* Continue Button */}
+        <button
+          onClick={onContinue}
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition"
+        >
+          Go to Campaign
+        </button>
       </div>
     </div>
   );

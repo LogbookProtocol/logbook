@@ -225,7 +225,7 @@ function AccountContent() {
         </div>
       </div>
 
-      {/* Tabs + LastUpdated */}
+      {/* Tabs */}
       <div className="flex items-end justify-between mb-8 border-b border-gray-200 dark:border-white/[0.06]">
         <div className="flex gap-2">
           {[
@@ -246,15 +246,6 @@ function AccountContent() {
             </button>
           ))}
         </div>
-        {!isMock && (
-          <div className="pb-3">
-            <LastUpdated
-              lastUpdated={lastUpdated}
-              onRefresh={handleManualRefresh}
-              isLoading={isRefreshing}
-            />
-          </div>
-        )}
       </div>
 
       {/* Tab content */}
@@ -266,6 +257,8 @@ function AccountContent() {
           onRefresh={handleManualRefresh}
           suiBalance={suiBalance}
           connectedAddress={connectedAddress}
+          lastUpdated={lastUpdated}
+          isRefreshing={isRefreshing}
         />
       )}
       {activeTab === 'free-tier' && (
@@ -291,6 +284,8 @@ function OverviewTab({
   onRefresh,
   suiBalance,
   connectedAddress,
+  lastUpdated,
+  isRefreshing,
 }: {
   stats: { campaignsCreated: number; campaignsParticipated: number; totalResponses: number; memberSince: string };
   isMock: boolean;
@@ -298,6 +293,8 @@ function OverviewTab({
   onRefresh: () => void;
   suiBalance: string;
   connectedAddress: string | null;
+  lastUpdated: Date | null;
+  isRefreshing: boolean;
 }) {
   const totalSpent = isMock ? getTotalSpentSui() : 0;
   const [suiPrice, setSuiPrice] = useState<number | null>(null);
@@ -361,6 +358,11 @@ function OverviewTab({
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Assets</h2>
             <div className="flex items-center gap-3">
+              <LastUpdated
+                lastUpdated={lastUpdated}
+                onRefresh={onRefresh}
+                isLoading={isRefreshing}
+              />
               {faucetMessage && (
                 <span className={`text-sm ${faucetMessage.type === 'success' ? 'text-green-500' : 'text-red-500'}`}>
                   {faucetMessage.text}

@@ -5,13 +5,16 @@ import { useState, useCallback } from 'react';
 export function useCopyLink() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const copyLink = useCallback(async (campaignId: string, e?: React.MouseEvent) => {
+  const copyLink = useCallback(async (campaignId: string, e?: React.MouseEvent, password?: string) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
 
-    const url = `${window.location.origin}/campaigns/${campaignId}`;
+    let url = `${window.location.origin}/campaigns/${campaignId}`;
+    if (password) {
+      url += `?key=${encodeURIComponent(password)}`;
+    }
     await navigator.clipboard.writeText(url);
     setCopiedId(campaignId);
     setTimeout(() => setCopiedId(null), 2000);
