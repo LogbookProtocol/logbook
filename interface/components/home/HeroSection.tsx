@@ -47,10 +47,10 @@ export function HeroSection() {
             <span className="block">Logbook</span>
             <span className="block">Permanent.</span>
           </div>
-          {/* Verifiable - gray version */}
+          {/* Verifiable - gray version with blur */}
           <span
             className={`absolute left-0 right-0 text-center text-gray-100 dark:text-gray-900 ${showTagline ? 'opacity-0' : 'opacity-100'}`}
-            style={{ top: 0 }}
+            style={{ top: 0, filter: 'blur(2px)' }}
           >
             Verifiable.
           </span>
@@ -64,16 +64,29 @@ export function HeroSection() {
           {/* Permanent - MUST be before Logbook in DOM so Logbook renders on top */}
           <span
             className={`absolute left-0 right-0 text-center text-gray-100 dark:text-gray-900 ${showTagline ? 'opacity-0' : 'opacity-100'}`}
-            style={{ top: 'calc(1.05em * 2)' }}
+            style={{ top: 'calc(1.05em * 2)', filter: 'blur(2px)' }}
           >
             Permanent.
           </span>
-          {/* Logbook - last so it renders on top */}
+          {/* Logbook - last so it renders on top, with shimmer effect */}
           <span
-            className={`absolute left-0 right-0 text-center bg-gradient-to-b from-cyan-400 to-blue-500 bg-clip-text text-transparent ${showTagline ? 'opacity-0' : 'opacity-100'}`}
+            className={`absolute left-0 right-0 text-center ${showTagline ? 'opacity-0' : 'opacity-100'}`}
             style={{ top: '1.05em', paddingBottom: '0.15em', marginBottom: '-0.15em' }}
           >
-            Logbook
+            {/* Base gradient text */}
+            <span className="bg-gradient-to-b from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              Logbook
+            </span>
+            {/* Shimmer overlay - white wave passing over */}
+            <span
+              className="absolute inset-0 bg-clip-text text-transparent animate-shimmer pointer-events-none"
+              style={{
+                backgroundImage: 'linear-gradient(90deg, transparent 0%, transparent 30%, rgba(255,255,255,0.8) 50%, transparent 70%, transparent 100%)',
+                backgroundSize: '400% 100%',
+              }}
+            >
+              Logbook
+            </span>
           </span>
 
           {/* Gradient group: Verifiable / Immutable / Permanent - shared gradient */}

@@ -303,6 +303,20 @@ nav a.glass-card, nav button.glass-card {
   animation: float 4s ease-in-out infinite;
 }
 
+/* Shimmer effect for text */
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  53%, 100% {
+    background-position: -33% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s linear infinite;
+}
+
 /* ========================================
    Documentation Styles - Premium Typography
    ======================================== */
