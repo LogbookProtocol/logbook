@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
@@ -41,7 +41,6 @@ export default function NewCampaignPage() {
     resetForm,
   } = useCampaignStore();
 
-  const [isDeploying, setIsDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [zkLoginError, setZkLoginError] = useState<ZkLoginErrorInfo | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -52,10 +51,13 @@ export default function NewCampaignPage() {
   const [suiPrice, setSuiPrice] = useState<number>(0);
   const { currency, currencySymbol } = useCurrency();
 
-  // Password modal state
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  // Deploy flow state: 'idle' | 'deploying' | 'success' | 'error'
+  const [deployState, setDeployState] = useState<'idle' | 'deploying' | 'success' | 'error'>('idle');
   const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [simulateError, setSimulateError] = useState(false);
+  const [countdown, setCountdown] = useState(5);
+  const [errorCopied, setErrorCopied] = useState(false);
 
   // Get referrer on client side
   useEffect(() => {
@@ -84,30 +86,38 @@ export default function NewCampaignPage() {
   const isValid = formData.title.trim() && formData.questions.length > 0;
 
   const handleDeploy = async () => {
-    setIsDeploying(true);
+    setDeployState('deploying');
     setDeployError(null);
+    setZkLoginError(null);
 
     const dataSource = getDataSource();
+
+    // Simulate error for testing
+    if (simulateError) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      setDeployError('Simulated blockchain error: MoveAbort(MoveLocation { module: ModuleId { address: 0x123, name: Identifier("logbook") }, function: 1, instruction: 42, function_name: Some("create_campaign") }, 1001) in command 0');
+      setDeployState('error');
+      return;
+    }
 
     // If using mock data, just simulate deployment
     if (dataSource === 'mock') {
       try {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         console.log('Campaign deployed (mock):', formData);
-        resetForm();
-        router.push('/campaigns');
+        setDeployState('success');
+        setCreatedCampaignId('mock-campaign-id');
       } catch (error) {
         console.error('Deploy failed:', error);
         setDeployError('Failed to deploy campaign');
-      } finally {
-        setIsDeploying(false);
+        setDeployState('error');
       }
       return;
     }
 
     if (!formData.endDate) {
       setDeployError('Please select an end date');
-      setIsDeploying(false);
+      setDeployState('error');
       return;
     }
 
@@ -126,7 +136,7 @@ export default function NewCampaignPage() {
     // If no zkLogin and no wallet, require connection
     if (!zkLoginAddress && !account) {
       setDeployError('Please connect your wallet to create a campaign');
-      setIsDeploying(false);
+      setDeployState('error');
       return;
     }
 
@@ -187,7 +197,7 @@ export default function NewCampaignPage() {
 
       if (!tx) {
         setDeployError('Failed to build transaction. Check your network settings.');
-        setIsDeploying(false);
+        setDeployState('error');
         return;
       }
 
@@ -195,21 +205,23 @@ export default function NewCampaignPage() {
       const connectedAddress = zkLoginAddress || account?.address;
       const handleDeploySuccess = (campaignId: string | null) => {
         if (isEncrypted && password) {
-          // Store password and show modal
+          // Store password
           if (campaignId) {
             storePassword(campaignId, password, connectedAddress);
           }
-          setCreatedCampaignId(campaignId);
-          setShowPasswordModal(true);
-          setIsDeploying(false);
-        } else {
-          resetForm();
-          if (campaignId) {
-            router.push(`/campaigns/${campaignId}`);
-          } else {
-            router.push('/campaigns');
-          }
         }
+        setCreatedCampaignId(campaignId);
+        setDeployState('success');
+      };
+
+      // Helper function to extract campaign ID from transaction result
+      const extractCampaignId = (objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }>) => {
+        console.log('extractCampaignId - objectChanges:', objectChanges);
+        const createdCampaign = objectChanges?.find(
+          (change) => change.type === 'created' && change.objectType?.includes('::logbook::Campaign')
+        );
+        console.log('extractCampaignId - createdCampaign:', createdCampaign);
+        return createdCampaign?.objectId || null;
       };
 
       // Use zkLogin transaction for Google users
@@ -219,16 +231,16 @@ export default function NewCampaignPage() {
           if (canUseSponsorship) {
             const result = await executeZkLoginSponsoredTransaction(tx, zkLoginAddress);
             console.log('Campaign deployed with sponsorship:', result.digest);
-            // For zkLogin, we need to fetch the created campaign ID from the transaction
-            // This is a simplified approach - for now we'll just redirect
-            handleDeploySuccess(null);
+            const campaignId = extractCampaignId(result.objectChanges);
+            handleDeploySuccess(campaignId);
             return;
           }
 
           // Fall back to non-sponsored zkLogin (user pays gas)
           const result = await executeZkLoginTransaction(tx, zkLoginAddress);
           console.log('Campaign deployed with zkLogin (user paid gas):', result.digest);
-          handleDeploySuccess(null);
+          const campaignId = extractCampaignId(result.objectChanges);
+          handleDeploySuccess(campaignId);
         } catch (error) {
           const err = error as Error & { code?: string };
           console.error('zkLogin deploy failed:', error);
@@ -252,7 +264,7 @@ export default function NewCampaignPage() {
             setDeployError(errorMessage || 'Failed to deploy campaign');
             setZkLoginError(null);
           }
-          setIsDeploying(false);
+          setDeployState('error');
         }
         return;
       }
@@ -264,27 +276,22 @@ export default function NewCampaignPage() {
           onSuccess: (result) => {
             console.log('Campaign deployed:', result);
 
-            // Try to extract the created campaign object ID from the result
-            // The result contains objectChanges with created objects
-            const createdObjects = (result as { objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }> })
-              .objectChanges?.filter(
-                (change) => change.type === 'created' && change.objectType?.includes('::logbook::Campaign')
-              );
-
-            const campaignId = createdObjects && createdObjects.length > 0 ? createdObjects[0].objectId : null;
-            handleDeploySuccess(campaignId || null);
+            // Extract campaign ID from result
+            const resultWithChanges = result as { objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }> };
+            const campaignId = extractCampaignId(resultWithChanges.objectChanges);
+            handleDeploySuccess(campaignId);
           },
           onError: (error) => {
             console.error('Deploy failed:', error);
             setDeployError(error.message || 'Failed to deploy campaign');
-            setIsDeploying(false);
+            setDeployState('error');
           },
         }
       );
     } catch (error) {
       console.error('Deploy failed:', error);
       setDeployError(error instanceof Error ? error.message : 'Failed to deploy campaign');
-      setIsDeploying(false);
+      setDeployState('error');
     }
   };
 
@@ -304,6 +311,87 @@ export default function NewCampaignPage() {
     addQuestion(newQuestion);
     setEditingQuestionId(newQuestion.id);
   };
+
+  // Deploying State - Show deployment progress screen
+  if (deployState === 'deploying') {
+    return (
+      <DeployingScreen
+        title={formData.title}
+        isEncrypted={formData.accessMode === 'password_protected'}
+      />
+    );
+  }
+
+  // Error State - Show error with copy and back buttons
+  if (deployState === 'error') {
+    return (
+      <DeployErrorScreen
+        error={deployError}
+        zkLoginError={zkLoginError}
+        errorCopied={errorCopied}
+        onCopyError={() => {
+          if (deployError) {
+            navigator.clipboard.writeText(deployError);
+            setErrorCopied(true);
+            setTimeout(() => setErrorCopied(false), 2000);
+          }
+        }}
+        onBack={() => {
+          setDeployState('idle');
+          setDeployError(null);
+          setZkLoginError(null);
+        }}
+        onDismissZkLoginError={() => setZkLoginError(null)}
+      />
+    );
+  }
+
+  // Success State - Show success with countdown or password
+  if (deployState === 'success') {
+    return (
+      <DeploySuccessScreen
+        isEncrypted={formData.accessMode === 'password_protected'}
+        password={generatedPassword}
+        campaignId={createdCampaignId}
+        campaignTitle={formData.title}
+        passwordCopied={passwordCopied}
+        countdown={countdown}
+        onCountdownTick={() => setCountdown(c => c - 1)}
+        onCopyPassword={() => {
+          if (generatedPassword) {
+            navigator.clipboard.writeText(generatedPassword);
+            setPasswordCopied(true);
+            setTimeout(() => setPasswordCopied(false), 2000);
+          }
+        }}
+        onDownloadPassword={() => {
+          if (generatedPassword) {
+            const content = generatePasswordFileContent(
+              generatedPassword,
+              formData.title,
+              createdCampaignId || 'unknown',
+              new Date()
+            );
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `logbook-campaign-password-${createdCampaignId?.slice(0, 8) || 'new'}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+        }}
+        onNavigate={() => {
+          resetForm();
+          if (createdCampaignId) {
+            router.push(`/campaigns/${createdCampaignId}`);
+          } else {
+            router.push('/campaigns');
+          }
+        }}
+      />
+    );
+  }
 
   // Review Mode
   if (isReviewMode) {
@@ -370,20 +458,21 @@ export default function NewCampaignPage() {
           </div>
         </div>
 
-        {/* zkLogin Error with relogin button */}
-        {zkLoginError && (
-          <ZkLoginErrorAlert
-            error={zkLoginError}
-            onDismiss={() => setZkLoginError(null)}
-          />
-        )}
-
-        {/* Regular error message */}
-        {deployError && !zkLoginError && (
-          <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 mb-6">
-            <p className="text-red-600 dark:text-red-400 text-sm">{deployError}</p>
-          </div>
-        )}
+        {/* Simulate Error Toggle (for testing) */}
+        <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 mb-6">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={simulateError}
+              onChange={(e) => setSimulateError(e.target.checked)}
+              className="w-4 h-4 text-orange-500 border-orange-300 rounded focus:ring-orange-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-orange-700 dark:text-orange-400">Simulate blockchain error</span>
+              <p className="text-xs text-orange-600 dark:text-orange-500 mt-0.5">For testing error handling flow</p>
+            </div>
+          </label>
+        </div>
 
         {/* Deploy */}
         <div className="flex gap-4">
@@ -395,20 +484,9 @@ export default function NewCampaignPage() {
           </button>
           <button
             onClick={handleDeploy}
-            disabled={isDeploying}
-            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition flex items-center justify-center gap-2"
           >
-            {isDeploying ? (
-              <>
-                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Deploying...
-              </>
-            ) : (
-              'Deploy Campaign'
-            )}
+            Deploy Campaign
           </button>
         </div>
       </div>
@@ -418,45 +496,6 @@ export default function NewCampaignPage() {
   // Edit Mode
   return (
     <div className="max-w-2xl mx-auto px-6 py-12">
-      {/* Password Modal */}
-      {showPasswordModal && generatedPassword && (
-        <PasswordSuccessModal
-          password={generatedPassword}
-          campaignId={createdCampaignId}
-          campaignTitle={formData.title}
-          passwordCopied={passwordCopied}
-          onCopy={() => {
-            navigator.clipboard.writeText(generatedPassword);
-            setPasswordCopied(true);
-            setTimeout(() => setPasswordCopied(false), 2000);
-          }}
-          onDownload={() => {
-            const content = generatePasswordFileContent(
-              generatedPassword,
-              formData.title,
-              createdCampaignId || 'unknown',
-              new Date()
-            );
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `logbook-campaign-password-${createdCampaignId?.slice(0, 8) || 'new'}.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
-          onContinue={() => {
-            setShowPasswordModal(false);
-            resetForm();
-            if (createdCampaignId) {
-              router.push(`/campaigns/${createdCampaignId}`);
-            } else {
-              router.push('/campaigns');
-            }
-          }}
-        />
-      )}
-
       {/* Header */}
       <div className="mb-8">
         <Link
@@ -472,6 +511,20 @@ export default function NewCampaignPage() {
       <CampaignTypeSelector
         accessMode={formData.accessMode}
         onSelect={setAccessMode}
+      />
+
+      {/* Fill with test data button */}
+      <TestDataButton
+        onFill={(data) => {
+          updateFormData({
+            title: data.title,
+            description: data.description,
+            endDate: data.endDate,
+          });
+          // Clear existing questions and add new ones
+          formData.questions.forEach(q => deleteQuestion(q.id));
+          data.questions.forEach(q => addQuestion(q));
+        }}
       />
 
       {/* Campaign Info */}
@@ -876,41 +929,201 @@ function CampaignTypeSelector({
   );
 }
 
-// Password Success Modal Component
-function PasswordSuccessModal({
+// Deploying Screen Component
+function DeployingScreen({
+  title,
+  isEncrypted,
+}: {
+  title: string;
+  isEncrypted: boolean;
+}) {
+  return (
+    <div className="max-w-md mx-auto px-6 py-24 text-center">
+      {/* Animated Loader */}
+      <div className="flex justify-center mb-8">
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 rounded-full border-4 border-gray-200 dark:border-white/10" />
+          <div className="absolute inset-0 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <svg className="w-8 h-8 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Deploying Campaign
+      </h1>
+      <p className="text-gray-500 dark:text-gray-400 mb-4">
+        {isEncrypted ? 'Encrypting and deploying' : 'Deploying'} &ldquo;{title}&rdquo; to the blockchain...
+      </p>
+      <p className="text-sm text-gray-400 dark:text-gray-500">
+        This may take a few seconds. Please don&apos;t close this page.
+      </p>
+    </div>
+  );
+}
+
+// Deploy Error Screen Component
+function DeployErrorScreen({
+  error,
+  zkLoginError,
+  errorCopied,
+  onCopyError,
+  onBack,
+  onDismissZkLoginError,
+}: {
+  error: string | null;
+  zkLoginError: ZkLoginErrorInfo | null;
+  errorCopied: boolean;
+  onCopyError: () => void;
+  onBack: () => void;
+  onDismissZkLoginError: () => void;
+}) {
+  return (
+    <div className="max-w-md mx-auto px-6 py-24">
+      {/* Error Icon */}
+      <div className="flex justify-center mb-6">
+        <div className="w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+          <svg className="w-10 h-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+      </div>
+
+      <h1 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-2">
+        Deployment Failed
+      </h1>
+      <p className="text-center text-gray-500 dark:text-gray-400 mb-6">
+        Something went wrong while deploying your campaign. Your data has been preserved.
+      </p>
+
+      {/* zkLogin Error */}
+      {zkLoginError && (
+        <div className="mb-6">
+          <ZkLoginErrorAlert
+            error={zkLoginError}
+            onDismiss={onDismissZkLoginError}
+          />
+        </div>
+      )}
+
+      {/* Error Details */}
+      {error && !zkLoginError && (
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Error Details
+          </label>
+          <div className="relative">
+            <textarea
+              readOnly
+              value={error}
+              rows={4}
+              className="w-full px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm font-mono resize-none"
+            />
+          </div>
+          <button
+            onClick={onCopyError}
+            className={`mt-2 w-full py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
+              errorCopied
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                : 'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/20'
+            }`}
+          >
+            {errorCopied ? (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy Error
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Back Button */}
+      <button
+        onClick={onBack}
+        className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition flex items-center justify-center gap-2"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Back to Editing
+      </button>
+    </div>
+  );
+}
+
+// Deploy Success Screen Component
+function DeploySuccessScreen({
+  isEncrypted,
   password,
   campaignId,
   campaignTitle,
   passwordCopied,
-  onCopy,
-  onDownload,
-  onContinue,
+  countdown,
+  onCountdownTick,
+  onCopyPassword,
+  onDownloadPassword,
+  onNavigate,
 }: {
-  password: string;
+  isEncrypted: boolean;
+  password: string | null;
   campaignId: string | null;
   campaignTitle: string;
   passwordCopied: boolean;
-  onCopy: () => void;
-  onDownload: () => void;
-  onContinue: () => void;
+  countdown: number;
+  onCountdownTick: () => void;
+  onCopyPassword: () => void;
+  onDownloadPassword: () => void;
+  onNavigate: () => void;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-md p-6 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 shadow-xl">
+  const hasNavigated = useRef(false);
+
+  // Auto-redirect countdown for open campaigns
+  useEffect(() => {
+    if (isEncrypted) return; // Don't auto-redirect for encrypted campaigns
+
+    if (countdown <= 0) {
+      if (!hasNavigated.current) {
+        hasNavigated.current = true;
+        onNavigate();
+      }
+      return;
+    }
+
+    const timer = setTimeout(onCountdownTick, 1000);
+    return () => clearTimeout(timer);
+  }, [isEncrypted, countdown, onCountdownTick, onNavigate]);
+
+  // For encrypted campaigns - show password screen
+  if (isEncrypted && password) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-24">
         {/* Success Icon */}
-        <div className="flex justify-center mb-4">
-          <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-            <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex justify-center mb-6">
+          <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <svg className="w-10 h-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
         </div>
 
-        <h2 className="text-xl font-bold text-center text-gray-900 dark:text-white mb-2">
+        <h1 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-2">
           Campaign Created!
-        </h2>
-        <p className="text-center text-gray-500 dark:text-gray-400 text-sm mb-6">
-          Your password-protected campaign has been deployed. Save this password — you'll need it to access the campaign.
+        </h1>
+        <p className="text-center text-gray-500 dark:text-gray-400 mb-6">
+          Your password-protected campaign has been deployed. Save this password — you&apos;ll need it to access the campaign.
         </p>
 
         {/* Password Display */}
@@ -926,7 +1139,7 @@ function PasswordSuccessModal({
               className="w-full px-4 py-3 pr-24 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 font-mono text-sm"
             />
             <button
-              onClick={onCopy}
+              onClick={onCopyPassword}
               className={`absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
                 passwordCopied
                   ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
@@ -940,7 +1153,7 @@ function PasswordSuccessModal({
 
         {/* Download Button */}
         <button
-          onClick={onDownload}
+          onClick={onDownloadPassword}
           className="w-full py-3 mb-4 rounded-xl border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition font-medium flex items-center justify-center gap-2"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -963,12 +1176,505 @@ function PasswordSuccessModal({
 
         {/* Continue Button */}
         <button
-          onClick={onContinue}
+          onClick={onNavigate}
           className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition"
         >
           Go to Campaign
         </button>
       </div>
+    );
+  }
+
+  // For open campaigns - show countdown
+  return (
+    <div className="max-w-md mx-auto px-6 py-24 text-center">
+      {/* Success Icon */}
+      <div className="flex justify-center mb-6">
+        <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+          <svg className="w-10 h-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      </div>
+
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Campaign Created!
+      </h1>
+      <p className="text-gray-500 dark:text-gray-400 mb-6">
+        &ldquo;{campaignTitle}&rdquo; has been successfully deployed to the blockchain.
+      </p>
+
+      {/* Countdown */}
+      <div className="mb-6">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+          <svg className="w-5 h-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm font-medium">Redirecting in {countdown}s...</span>
+        </div>
+      </div>
+
+      {/* Skip Button */}
+      <button
+        onClick={onNavigate}
+        className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition"
+      >
+        Go to campaign now →
+      </button>
     </div>
+  );
+}
+
+// Test Data Templates - 100 diverse campaigns
+type TestQuestion = {
+  text: string;
+  type: QuestionType;
+  required: boolean;
+  answers: string[];
+};
+
+type TestCampaign = {
+  title: string;
+  description: string;
+  questions: TestQuestion[];
+};
+
+const TEST_CAMPAIGNS: TestCampaign[] = [
+  // 1-10: Product & Service Feedback
+  { title: 'Product Satisfaction Survey', description: 'Help us understand your experience with our product.', questions: [
+    { text: 'How satisfied are you overall?', type: 'single_choice', required: true, answers: ['Very satisfied', 'Satisfied', 'Neutral', 'Dissatisfied'] },
+    { text: 'Which features do you use most?', type: 'multiple_choice', required: true, answers: ['Dashboard', 'Reports', 'Analytics', 'Settings'] },
+    { text: 'What would you improve?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Customer Support Rating', description: 'Rate your recent support experience.', questions: [
+    { text: 'How would you rate our support?', type: 'single_choice', required: true, answers: ['Excellent', 'Good', 'Average', 'Poor'] },
+  ]},
+  { title: 'Feature Request Poll', description: 'Vote for the next feature we should build.', questions: [
+    { text: 'Which feature matters most to you?', type: 'single_choice', required: true, answers: ['Dark mode', 'Mobile app', 'API access', 'Integrations'] },
+    { text: 'Describe your ideal feature', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Onboarding Experience', description: 'Tell us about your first experience with our platform.', questions: [
+    { text: 'How easy was it to get started?', type: 'single_choice', required: true, answers: ['Very easy', 'Easy', 'Difficult', 'Very difficult'] },
+    { text: 'What confused you during setup?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Mobile App Feedback', description: 'Share your thoughts on our mobile application.', questions: [
+    { text: 'Rate the app performance', type: 'single_choice', required: true, answers: ['Excellent', 'Good', 'Acceptable', 'Poor'] },
+    { text: 'What features are missing?', type: 'multiple_choice', required: false, answers: ['Offline mode', 'Push notifications', 'Biometric login', 'Widgets'] },
+  ]},
+  { title: 'Website Usability', description: 'Help us improve our website experience.', questions: [
+    { text: 'How easy is our site to navigate?', type: 'single_choice', required: true, answers: ['Very easy', 'Somewhat easy', 'Difficult', 'Very difficult'] },
+  ]},
+  { title: 'Pricing Feedback', description: 'Share your thoughts on our pricing structure.', questions: [
+    { text: 'Is our pricing fair?', type: 'single_choice', required: true, answers: ['Very fair', 'Fair', 'Expensive', 'Too expensive'] },
+    { text: 'Which plan do you use?', type: 'single_choice', required: true, answers: ['Free', 'Basic', 'Pro', 'Enterprise'] },
+    { text: 'Suggestions for pricing?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Beta Feature Testing', description: 'Help us test new features before launch.', questions: [
+    { text: 'Did the feature work as expected?', type: 'single_choice', required: true, answers: ['Yes, perfectly', 'Mostly yes', 'Had issues', 'Did not work'] },
+    { text: 'Describe any bugs you found', type: 'text_input', required: true, answers: [] },
+  ]},
+  { title: 'Documentation Quality', description: 'Rate our help articles and guides.', questions: [
+    { text: 'Are our docs helpful?', type: 'single_choice', required: true, answers: ['Very helpful', 'Helpful', 'Needs improvement', 'Not helpful'] },
+    { text: 'What topics need more coverage?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'NPS Survey', description: 'Quick survey about your likelihood to recommend us.', questions: [
+    { text: 'Would you recommend us to a friend?', type: 'single_choice', required: true, answers: ['Definitely', 'Probably', 'Not sure', 'No'] },
+  ]},
+
+  // 11-20: Workplace & HR
+  { title: 'Employee Satisfaction', description: 'Anonymous survey about workplace happiness.', questions: [
+    { text: 'How happy are you at work?', type: 'single_choice', required: true, answers: ['Very happy', 'Happy', 'Neutral', 'Unhappy'] },
+    { text: 'What would improve your experience?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Remote Work Preferences', description: 'Help us understand your work-from-home needs.', questions: [
+    { text: 'Preferred work arrangement?', type: 'single_choice', required: true, answers: ['Fully remote', 'Hybrid', 'In-office', 'Flexible'] },
+    { text: 'What tools do you need?', type: 'multiple_choice', required: false, answers: ['Better webcam', 'Standing desk', 'Monitor', 'Headset'] },
+  ]},
+  { title: 'Team Meeting Feedback', description: 'Rate our recent all-hands meeting.', questions: [
+    { text: 'Was the meeting useful?', type: 'single_choice', required: true, answers: ['Very useful', 'Somewhat useful', 'Not useful', 'Waste of time'] },
+    { text: 'Topics for next meeting?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Training Needs Assessment', description: 'Tell us what skills you want to develop.', questions: [
+    { text: 'Which areas interest you?', type: 'multiple_choice', required: true, answers: ['Leadership', 'Technical skills', 'Communication', 'Project management'] },
+  ]},
+  { title: 'Office Environment Survey', description: 'Feedback on our physical workspace.', questions: [
+    { text: 'Rate the office comfort', type: 'single_choice', required: true, answers: ['Excellent', 'Good', 'Acceptable', 'Poor'] },
+    { text: 'What improvements are needed?', type: 'multiple_choice', required: false, answers: ['Better lighting', 'Quieter spaces', 'More plants', 'Better AC'] },
+    { text: 'Other suggestions?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Manager Feedback', description: 'Anonymous feedback about your direct manager.', questions: [
+    { text: 'Does your manager support you?', type: 'single_choice', required: true, answers: ['Always', 'Usually', 'Sometimes', 'Rarely'] },
+    { text: 'What could they improve?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Benefits Satisfaction', description: 'Rate our employee benefits package.', questions: [
+    { text: 'Overall benefits satisfaction?', type: 'single_choice', required: true, answers: ['Very satisfied', 'Satisfied', 'Neutral', 'Dissatisfied'] },
+    { text: 'Which benefits matter most?', type: 'multiple_choice', required: true, answers: ['Health insurance', 'PTO', '401k', 'Remote work'] },
+  ]},
+  { title: 'Sprint Retrospective', description: 'Share your thoughts on the last sprint.', questions: [
+    { text: 'What went well?', type: 'text_input', required: true, answers: [] },
+    { text: 'What could be improved?', type: 'text_input', required: true, answers: [] },
+    { text: 'Rate team collaboration', type: 'single_choice', required: true, answers: ['Excellent', 'Good', 'Average', 'Poor'] },
+  ]},
+  { title: 'Onboarding Feedback (New Hire)', description: 'How was your first week?', questions: [
+    { text: 'Did you feel welcomed?', type: 'single_choice', required: true, answers: ['Very welcomed', 'Welcomed', 'Neutral', 'Not welcomed'] },
+    { text: 'What was unclear?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Company Culture Survey', description: 'How do you feel about our culture?', questions: [
+    { text: 'Do you feel valued?', type: 'single_choice', required: true, answers: ['Always', 'Usually', 'Sometimes', 'Never'] },
+  ]},
+
+  // 21-30: Events & Community
+  { title: 'Conference Registration', description: 'Sign up for our upcoming conference.', questions: [
+    { text: 'Which day will you attend?', type: 'single_choice', required: true, answers: ['Day 1', 'Day 2', 'Both days', 'Virtual only'] },
+    { text: 'Dietary requirements?', type: 'multiple_choice', required: false, answers: ['Vegetarian', 'Vegan', 'Gluten-free', 'None'] },
+  ]},
+  { title: 'Workshop Interest', description: 'Which workshops would you attend?', questions: [
+    { text: 'Select your interests', type: 'multiple_choice', required: true, answers: ['Web3 basics', 'Smart contracts', 'DeFi', 'NFTs'] },
+  ]},
+  { title: 'Meetup Feedback', description: 'How was our latest community meetup?', questions: [
+    { text: 'Rate the event', type: 'single_choice', required: true, answers: ['Amazing', 'Good', 'Average', 'Disappointing'] },
+    { text: 'Favorite part?', type: 'text_input', required: false, answers: [] },
+    { text: 'What should we do next time?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Webinar Topics', description: 'Vote on our next webinar topic.', questions: [
+    { text: 'Which topic interests you most?', type: 'single_choice', required: true, answers: ['AI in blockchain', 'Security best practices', 'Scaling solutions', 'Governance models'] },
+  ]},
+  { title: 'Hackathon Registration', description: 'Sign up for our 48-hour hackathon.', questions: [
+    { text: 'Team or solo?', type: 'single_choice', required: true, answers: ['Team', 'Solo', 'Looking for team', 'Undecided'] },
+    { text: 'Your experience level?', type: 'single_choice', required: true, answers: ['Beginner', 'Intermediate', 'Advanced', 'Expert'] },
+  ]},
+  { title: 'Speaker Feedback', description: 'Rate our guest speaker presentation.', questions: [
+    { text: 'How engaging was the talk?', type: 'single_choice', required: true, answers: ['Very engaging', 'Engaging', 'Boring', 'Very boring'] },
+    { text: 'Key takeaway?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Community Pulse Check', description: 'Quick check on community health.', questions: [
+    { text: 'Do you feel part of our community?', type: 'single_choice', required: true, answers: ['Definitely', 'Somewhat', 'Not really', 'Not at all'] },
+  ]},
+  { title: 'AMA Topics', description: 'What should we discuss in our next AMA?', questions: [
+    { text: 'Suggest a topic', type: 'text_input', required: true, answers: [] },
+  ]},
+  { title: 'Networking Event RSVP', description: 'Join us for drinks and networking.', questions: [
+    { text: 'Will you attend?', type: 'single_choice', required: true, answers: ['Yes', 'Maybe', 'No', 'Need more info'] },
+    { text: 'Bringing a plus one?', type: 'single_choice', required: false, answers: ['Yes', 'No', 'Maybe'] },
+  ]},
+  { title: 'Content Preferences', description: 'What content do you want to see?', questions: [
+    { text: 'Preferred content type?', type: 'multiple_choice', required: true, answers: ['Blog posts', 'Videos', 'Podcasts', 'Tutorials'] },
+    { text: 'How often should we post?', type: 'single_choice', required: true, answers: ['Daily', 'Weekly', 'Bi-weekly', 'Monthly'] },
+  ]},
+
+  // 31-40: Education & Research
+  { title: 'Course Feedback', description: 'Rate your learning experience.', questions: [
+    { text: 'How useful was the course?', type: 'single_choice', required: true, answers: ['Extremely useful', 'Useful', 'Somewhat useful', 'Not useful'] },
+    { text: 'Would you recommend it?', type: 'single_choice', required: true, answers: ['Definitely', 'Probably', 'Maybe not', 'No'] },
+  ]},
+  { title: 'Learning Preferences', description: 'How do you prefer to learn?', questions: [
+    { text: 'Best learning format?', type: 'single_choice', required: true, answers: ['Video', 'Reading', 'Hands-on', 'Live sessions'] },
+  ]},
+  { title: 'Research Participation', description: 'Help us with our academic study.', questions: [
+    { text: 'How often do you use blockchain?', type: 'single_choice', required: true, answers: ['Daily', 'Weekly', 'Monthly', 'Rarely'] },
+    { text: 'Primary use case?', type: 'text_input', required: true, answers: [] },
+  ]},
+  { title: 'Student Experience Survey', description: 'Feedback on your educational journey.', questions: [
+    { text: 'Rate the curriculum', type: 'single_choice', required: true, answers: ['Excellent', 'Good', 'Average', 'Poor'] },
+    { text: 'What topics should we add?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Instructor Rating', description: 'Rate your instructor.', questions: [
+    { text: 'Was the instructor clear?', type: 'single_choice', required: true, answers: ['Very clear', 'Clear', 'Confusing', 'Very confusing'] },
+    { text: 'Additional feedback?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Quiz: Blockchain Basics', description: 'Test your knowledge.', questions: [
+    { text: 'What is a smart contract?', type: 'single_choice', required: true, answers: ['Self-executing code', 'Legal document', 'A wallet', 'A token'] },
+    { text: 'What consensus does Bitcoin use?', type: 'single_choice', required: true, answers: ['Proof of Work', 'Proof of Stake', 'DPoS', 'PoA'] },
+  ]},
+  { title: 'Certification Interest', description: 'Would you pursue blockchain certification?', questions: [
+    { text: 'Interest level?', type: 'single_choice', required: true, answers: ['Very interested', 'Interested', 'Not sure', 'Not interested'] },
+  ]},
+  { title: 'Tutorial Feedback', description: 'Rate our latest tutorial.', questions: [
+    { text: 'Was it easy to follow?', type: 'single_choice', required: true, answers: ['Very easy', 'Easy', 'Difficult', 'Too difficult'] },
+    { text: 'What was confusing?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Bootcamp Application', description: 'Apply for our intensive program.', questions: [
+    { text: 'Your coding experience?', type: 'single_choice', required: true, answers: ['None', 'Beginner', 'Intermediate', 'Advanced'] },
+    { text: 'Why do you want to join?', type: 'text_input', required: true, answers: [] },
+  ]},
+  { title: 'Study Group Interest', description: 'Join a study group.', questions: [
+    { text: 'Preferred meeting time?', type: 'single_choice', required: true, answers: ['Morning', 'Afternoon', 'Evening', 'Weekend'] },
+    { text: 'Topics you want to cover?', type: 'multiple_choice', required: true, answers: ['Solidity', 'Move', 'Rust', 'Security'] },
+  ]},
+
+  // 41-50: Market Research
+  { title: 'Crypto Usage Survey', description: 'How do you use cryptocurrency?', questions: [
+    { text: 'Primary crypto activity?', type: 'single_choice', required: true, answers: ['Trading', 'Holding', 'DeFi', 'NFTs'] },
+    { text: 'Which chains do you use?', type: 'multiple_choice', required: true, answers: ['Ethereum', 'Solana', 'Sui', 'Bitcoin'] },
+  ]},
+  { title: 'Wallet Preferences', description: 'Which wallets do you prefer?', questions: [
+    { text: 'Favorite wallet type?', type: 'single_choice', required: true, answers: ['Browser extension', 'Mobile app', 'Hardware', 'Custodial'] },
+  ]},
+  { title: 'DeFi Experience', description: 'Share your DeFi journey.', questions: [
+    { text: 'DeFi experience level?', type: 'single_choice', required: true, answers: ['Expert', 'Intermediate', 'Beginner', 'Never used'] },
+    { text: 'Biggest DeFi challenge?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'NFT Market Research', description: 'Your thoughts on NFTs.', questions: [
+    { text: 'Have you bought an NFT?', type: 'single_choice', required: true, answers: ['Yes, many', 'Yes, a few', 'No, but interested', 'Not interested'] },
+    { text: 'What type interests you?', type: 'multiple_choice', required: false, answers: ['Art', 'Gaming', 'Music', 'Collectibles'] },
+  ]},
+  { title: 'Trading Habits', description: 'How do you trade crypto?', questions: [
+    { text: 'Trading frequency?', type: 'single_choice', required: true, answers: ['Daily', 'Weekly', 'Monthly', 'Rarely'] },
+    { text: 'Preferred exchange type?', type: 'single_choice', required: true, answers: ['CEX', 'DEX', 'Both', 'Neither'] },
+  ]},
+  { title: 'Security Practices', description: 'How do you protect your assets?', questions: [
+    { text: 'Do you use a hardware wallet?', type: 'single_choice', required: true, answers: ['Yes, always', 'Sometimes', 'No', 'Planning to'] },
+    { text: 'Security concerns?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Gas Fee Tolerance', description: 'How do gas fees affect you?', questions: [
+    { text: 'Max acceptable gas fee?', type: 'single_choice', required: true, answers: ['Under $1', '$1-5', '$5-20', 'Any amount'] },
+  ]},
+  { title: 'Chain Preferences', description: 'Which blockchains do you prefer?', questions: [
+    { text: 'Your main chain?', type: 'single_choice', required: true, answers: ['Ethereum', 'Solana', 'Sui', 'Other'] },
+    { text: 'Why this chain?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Investment Strategy', description: 'Your crypto investment approach.', questions: [
+    { text: 'Investment style?', type: 'single_choice', required: true, answers: ['Long-term hold', 'Active trading', 'DCA', 'Mixed'] },
+  ]},
+  { title: 'Web3 Adoption Barriers', description: 'What stops mainstream adoption?', questions: [
+    { text: 'Biggest barrier?', type: 'single_choice', required: true, answers: ['Complexity', 'Security fears', 'Volatility', 'Regulation'] },
+    { text: 'How to fix it?', type: 'text_input', required: false, answers: [] },
+  ]},
+
+  // 51-60: Gaming & Entertainment
+  { title: 'Gaming Preferences', description: 'What games do you enjoy?', questions: [
+    { text: 'Favorite genre?', type: 'single_choice', required: true, answers: ['RPG', 'Strategy', 'Action', 'Puzzle'] },
+    { text: 'Platforms you use?', type: 'multiple_choice', required: true, answers: ['PC', 'Console', 'Mobile', 'VR'] },
+  ]},
+  { title: 'Play-to-Earn Survey', description: 'Your P2E experience.', questions: [
+    { text: 'Do you play P2E games?', type: 'single_choice', required: true, answers: ['Yes, regularly', 'Sometimes', 'Tried once', 'Never'] },
+    { text: 'What matters most in P2E?', type: 'single_choice', required: true, answers: ['Earnings', 'Fun gameplay', 'Community', 'Graphics'] },
+  ]},
+  { title: 'Metaverse Interest', description: 'Your thoughts on the metaverse.', questions: [
+    { text: 'Metaverse excitement level?', type: 'single_choice', required: true, answers: ['Very excited', 'Curious', 'Skeptical', 'Not interested'] },
+  ]},
+  { title: 'Streaming Preferences', description: 'How do you consume content?', questions: [
+    { text: 'Preferred platform?', type: 'single_choice', required: true, answers: ['YouTube', 'Twitch', 'TikTok', 'Other'] },
+    { text: 'Content type?', type: 'multiple_choice', required: true, answers: ['Tutorials', 'Entertainment', 'News', 'Reviews'] },
+  ]},
+  { title: 'In-Game Purchases', description: 'Your spending habits in games.', questions: [
+    { text: 'Do you buy in-game items?', type: 'single_choice', required: true, answers: ['Often', 'Sometimes', 'Rarely', 'Never'] },
+  ]},
+  { title: 'Esports Interest', description: 'Do you follow competitive gaming?', questions: [
+    { text: 'Esports engagement?', type: 'single_choice', required: true, answers: ['Watch regularly', 'Occasionally', 'Rarely', 'Never'] },
+    { text: 'Favorite esport?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Music NFTs', description: 'Your interest in music NFTs.', questions: [
+    { text: 'Would you buy music NFTs?', type: 'single_choice', required: true, answers: ['Already have', 'Would consider', 'Maybe', 'No interest'] },
+  ]},
+  { title: 'Virtual Events', description: 'Virtual concert/event preferences.', questions: [
+    { text: 'Attended virtual events?', type: 'single_choice', required: true, answers: ['Yes, loved it', 'Yes, it was okay', 'No, but interested', 'Not interested'] },
+    { text: 'What would make them better?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Avatar Customization', description: 'How important are avatars?', questions: [
+    { text: 'Avatar importance?', type: 'single_choice', required: true, answers: ['Very important', 'Somewhat', 'Not very', 'Not at all'] },
+  ]},
+  { title: 'Social Gaming', description: 'Gaming with friends.', questions: [
+    { text: 'How often do you play with friends?', type: 'single_choice', required: true, answers: ['Always', 'Often', 'Sometimes', 'Solo only'] },
+    { text: 'Preferred multiplayer type?', type: 'single_choice', required: true, answers: ['Co-op', 'Competitive', 'MMO', 'Local'] },
+  ]},
+
+  // 61-70: Health & Lifestyle
+  { title: 'Wellness Check-in', description: 'Quick wellness survey.', questions: [
+    { text: 'How are you feeling today?', type: 'single_choice', required: true, answers: ['Great', 'Good', 'Okay', 'Not great'] },
+  ]},
+  { title: 'Fitness Goals', description: 'What are your fitness objectives?', questions: [
+    { text: 'Primary fitness goal?', type: 'single_choice', required: true, answers: ['Lose weight', 'Build muscle', 'Stay healthy', 'Improve endurance'] },
+    { text: 'Workout frequency?', type: 'single_choice', required: true, answers: ['Daily', '3-5x week', '1-2x week', 'Rarely'] },
+  ]},
+  { title: 'Sleep Quality', description: 'How well do you sleep?', questions: [
+    { text: 'Average sleep quality?', type: 'single_choice', required: true, answers: ['Excellent', 'Good', 'Fair', 'Poor'] },
+    { text: 'What affects your sleep?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Diet Preferences', description: 'Your dietary habits.', questions: [
+    { text: 'Diet type?', type: 'single_choice', required: true, answers: ['Omnivore', 'Vegetarian', 'Vegan', 'Keto/Low-carb'] },
+  ]},
+  { title: 'Mental Health Check', description: 'How is your mental wellbeing?', questions: [
+    { text: 'Stress level lately?', type: 'single_choice', required: true, answers: ['Very low', 'Manageable', 'High', 'Overwhelming'] },
+    { text: 'What helps you relax?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Work-Life Balance', description: 'Your balance assessment.', questions: [
+    { text: 'Rate your work-life balance', type: 'single_choice', required: true, answers: ['Excellent', 'Good', 'Needs work', 'Poor'] },
+  ]},
+  { title: 'Productivity Habits', description: 'How do you stay productive?', questions: [
+    { text: 'Most productive time?', type: 'single_choice', required: true, answers: ['Early morning', 'Late morning', 'Afternoon', 'Night'] },
+    { text: 'Productivity tools?', type: 'multiple_choice', required: false, answers: ['To-do lists', 'Calendar blocking', 'Pomodoro', 'None'] },
+  ]},
+  { title: 'Hobby Survey', description: 'What do you do for fun?', questions: [
+    { text: 'Main hobby?', type: 'text_input', required: true, answers: [] },
+    { text: 'Hours per week on hobbies?', type: 'single_choice', required: true, answers: ['0-5', '5-10', '10-20', '20+'] },
+  ]},
+  { title: 'Travel Preferences', description: 'How do you like to travel?', questions: [
+    { text: 'Preferred travel style?', type: 'single_choice', required: true, answers: ['Adventure', 'Relaxation', 'Cultural', 'Business'] },
+  ]},
+  { title: 'Reading Habits', description: 'Your reading preferences.', questions: [
+    { text: 'Books read per year?', type: 'single_choice', required: true, answers: ['0-5', '5-15', '15-30', '30+'] },
+    { text: 'Preferred format?', type: 'single_choice', required: true, answers: ['Physical', 'E-book', 'Audiobook', 'Mixed'] },
+  ]},
+
+  // 71-80: Technology & Preferences
+  { title: 'Device Usage', description: 'Which devices do you use?', questions: [
+    { text: 'Primary device?', type: 'single_choice', required: true, answers: ['Desktop', 'Laptop', 'Tablet', 'Phone'] },
+    { text: 'Operating system?', type: 'single_choice', required: true, answers: ['Windows', 'macOS', 'Linux', 'Chrome OS'] },
+  ]},
+  { title: 'Browser Preferences', description: 'Which browser do you prefer?', questions: [
+    { text: 'Main browser?', type: 'single_choice', required: true, answers: ['Chrome', 'Firefox', 'Safari', 'Brave'] },
+  ]},
+  { title: 'AI Usage Survey', description: 'How do you use AI tools?', questions: [
+    { text: 'AI usage frequency?', type: 'single_choice', required: true, answers: ['Daily', 'Weekly', 'Monthly', 'Never'] },
+    { text: 'Main AI use case?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Privacy Concerns', description: 'Your data privacy views.', questions: [
+    { text: 'Privacy concern level?', type: 'single_choice', required: true, answers: ['Very concerned', 'Concerned', 'Neutral', 'Not concerned'] },
+    { text: 'Privacy measures you take?', type: 'multiple_choice', required: false, answers: ['VPN', 'Password manager', 'Ad blocker', 'None'] },
+  ]},
+  { title: 'Smart Home', description: 'Your smart home setup.', questions: [
+    { text: 'Smart home adoption?', type: 'single_choice', required: true, answers: ['Fully automated', 'Some devices', 'Planning to', 'Not interested'] },
+  ]},
+  { title: 'Social Media Usage', description: 'Your social media habits.', questions: [
+    { text: 'Daily social media time?', type: 'single_choice', required: true, answers: ['Under 1 hour', '1-3 hours', '3-5 hours', '5+ hours'] },
+    { text: 'Favorite platform?', type: 'single_choice', required: true, answers: ['Twitter/X', 'Instagram', 'TikTok', 'LinkedIn'] },
+  ]},
+  { title: 'Coding Languages', description: 'Which languages do you use?', questions: [
+    { text: 'Primary language?', type: 'single_choice', required: true, answers: ['JavaScript', 'Python', 'Rust', 'Other'] },
+    { text: 'Languages you want to learn?', type: 'multiple_choice', required: false, answers: ['Rust', 'Go', 'Move', 'Solidity'] },
+  ]},
+  { title: 'Newsletter Preferences', description: 'Email content preferences.', questions: [
+    { text: 'Preferred email frequency?', type: 'single_choice', required: true, answers: ['Daily', 'Weekly', 'Monthly', 'Never'] },
+  ]},
+  { title: 'App Notifications', description: 'How do you feel about notifications?', questions: [
+    { text: 'Notification preference?', type: 'single_choice', required: true, answers: ['All on', 'Selective', 'Minimal', 'All off'] },
+  ]},
+  { title: 'Tech Support Experience', description: 'Rate tech support interactions.', questions: [
+    { text: 'Preferred support channel?', type: 'single_choice', required: true, answers: ['Live chat', 'Email', 'Phone', 'Self-service'] },
+    { text: 'Best support experience?', type: 'text_input', required: false, answers: [] },
+  ]},
+
+  // 81-90: Governance & DAO
+  { title: 'DAO Participation', description: 'Your DAO involvement.', questions: [
+    { text: 'Are you in any DAOs?', type: 'single_choice', required: true, answers: ['Yes, multiple', 'Yes, one', 'No, but interested', 'Not interested'] },
+  ]},
+  { title: 'Governance Proposal', description: 'Vote on this proposal.', questions: [
+    { text: 'Your vote?', type: 'single_choice', required: true, answers: ['For', 'Against', 'Abstain'] },
+    { text: 'Reasoning?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Treasury Allocation', description: 'How should we spend treasury?', questions: [
+    { text: 'Priority spending area?', type: 'single_choice', required: true, answers: ['Development', 'Marketing', 'Community', 'Reserves'] },
+  ]},
+  { title: 'Voting Frequency', description: 'How often do you vote?', questions: [
+    { text: 'Governance participation?', type: 'single_choice', required: true, answers: ['Every proposal', 'Most proposals', 'Sometimes', 'Never'] },
+    { text: 'What would increase participation?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Delegate Selection', description: 'Choosing a delegate.', questions: [
+    { text: 'What matters in a delegate?', type: 'multiple_choice', required: true, answers: ['Expertise', 'Activity', 'Alignment', 'Reputation'] },
+  ]},
+  { title: 'Protocol Upgrade Vote', description: 'Should we upgrade?', questions: [
+    { text: 'Support the upgrade?', type: 'single_choice', required: true, answers: ['Strongly support', 'Support', 'Oppose', 'Strongly oppose'] },
+  ]},
+  { title: 'Community Grants', description: 'Grant program feedback.', questions: [
+    { text: 'Grant program effectiveness?', type: 'single_choice', required: true, answers: ['Very effective', 'Effective', 'Needs improvement', 'Not effective'] },
+    { text: 'Suggestions for grants?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Tokenomics Feedback', description: 'Your thoughts on our token model.', questions: [
+    { text: 'Token utility rating?', type: 'single_choice', required: true, answers: ['Excellent', 'Good', 'Average', 'Poor'] },
+  ]},
+  { title: 'Roadmap Priorities', description: 'What should we build next?', questions: [
+    { text: 'Top priority?', type: 'single_choice', required: true, answers: ['Scalability', 'New features', 'Security', 'Integrations'] },
+    { text: 'Feature request?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Partnership Vote', description: 'Should we partner with X?', questions: [
+    { text: 'Your opinion?', type: 'single_choice', required: true, answers: ['Strong yes', 'Yes', 'No', 'Strong no'] },
+  ]},
+
+  // 91-100: Misc & Fun
+  { title: 'Quick Poll', description: 'Just a quick question.', questions: [
+    { text: 'Tabs or spaces?', type: 'single_choice', required: true, answers: ['Tabs', 'Spaces', 'Both', 'I don\'t code'] },
+  ]},
+  { title: 'Hot Take Survey', description: 'Share your controversial opinions.', questions: [
+    { text: 'Is Web3 the future?', type: 'single_choice', required: true, answers: ['Absolutely', 'Probably', 'Doubtful', 'No way'] },
+    { text: 'Your hottest take?', type: 'text_input', required: true, answers: [] },
+  ]},
+  { title: 'Emoji Poll', description: 'Pick your favorite.', questions: [
+    { text: 'Best emoji?', type: 'single_choice', required: true, answers: ['🚀', '🔥', '💎', '🌙'] },
+  ]},
+  { title: 'Coffee or Tea', description: 'The eternal question.', questions: [
+    { text: 'Your preference?', type: 'single_choice', required: true, answers: ['Coffee', 'Tea', 'Both', 'Neither'] },
+  ]},
+  { title: 'Timezone Check', description: 'Where are you located?', questions: [
+    { text: 'Your timezone region?', type: 'single_choice', required: true, answers: ['Americas', 'Europe/Africa', 'Asia', 'Oceania'] },
+  ]},
+  { title: 'Pet Preferences', description: 'Cats, dogs, or other?', questions: [
+    { text: 'Favorite pet?', type: 'single_choice', required: true, answers: ['Dog', 'Cat', 'Other', 'No pets'] },
+    { text: 'Pet name if you have one?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Season Preference', description: 'What\'s your favorite season?', questions: [
+    { text: 'Best season?', type: 'single_choice', required: true, answers: ['Spring', 'Summer', 'Fall', 'Winter'] },
+  ]},
+  { title: 'Introvert or Extrovert', description: 'Quick personality check.', questions: [
+    { text: 'You are more...', type: 'single_choice', required: true, answers: ['Introvert', 'Extrovert', 'Ambivert', 'Depends on mood'] },
+  ]},
+  { title: 'Superpower Poll', description: 'If you could have one...', questions: [
+    { text: 'Choose a superpower', type: 'single_choice', required: true, answers: ['Fly', 'Invisibility', 'Time travel', 'Mind reading'] },
+    { text: 'What would you do with it?', type: 'text_input', required: false, answers: [] },
+  ]},
+  { title: 'Random Feedback', description: 'Tell us anything.', questions: [
+    { text: 'Rate your day', type: 'single_choice', required: true, answers: ['Amazing', 'Good', 'Meh', 'Bad'] },
+    { text: 'Anything on your mind?', type: 'text_input', required: false, answers: [] },
+    { text: 'Send us a message', type: 'text_input', required: false, answers: [] },
+  ]},
+];
+
+// Test Data Button Component
+function TestDataButton({
+  onFill,
+}: {
+  onFill: (data: { title: string; description: string; endDate: string; questions: Question[] }) => void;
+}) {
+  const handleClick = () => {
+    // Pick a random template
+    const template = TEST_CAMPAIGNS[Math.floor(Math.random() * TEST_CAMPAIGNS.length)];
+
+    // Generate end date 7 days from now
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 7);
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    // Generate unique IDs for questions and answers
+    const now = Date.now();
+    const questions: Question[] = template.questions.map((q, qIndex) => ({
+      id: `q-${now}-${qIndex}`,
+      text: q.text,
+      type: q.type,
+      required: q.required,
+      answers: q.answers.map((answerText, aIndex) => ({
+        id: `a-${now}-${qIndex}-${aIndex}`,
+        text: answerText,
+      })),
+    }));
+
+    onFill({
+      title: `[Test] ${template.title}`,
+      description: template.description,
+      endDate: endDateStr,
+      questions,
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="mb-6 w-full py-2.5 rounded-lg border border-dashed border-gray-300 dark:border-white/20 text-gray-500 dark:text-gray-400 hover:border-cyan-500 hover:text-cyan-500 dark:hover:border-cyan-500 dark:hover:text-cyan-400 transition text-sm flex items-center justify-center gap-2"
+    >
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+      </svg>
+      Fill with random test data
+    </button>
   );
 }

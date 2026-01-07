@@ -716,7 +716,7 @@ export async function executeSponsoredTransaction(
 export async function executeZkLoginSponsoredTransaction(
   tx: Transaction,
   senderAddress: string
-): Promise<{ digest: string }> {
+): Promise<{ digest: string; objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }> }> {
   console.log('=== executeZkLoginSponsoredTransaction START ===');
   console.log('senderAddress:', senderAddress);
 
@@ -790,21 +790,26 @@ export async function executeZkLoginSponsoredTransaction(
     signature: [zkLoginSignature, sponsorSignature],
     options: {
       showEffects: true,
+      showObjectChanges: true,
     },
   });
 
   console.log('=== TRANSACTION SUCCESS ===');
   console.log('Digest:', result.digest);
   console.log('Effects status:', result.effects?.status);
+  console.log('Object changes:', JSON.stringify(result.objectChanges, null, 2));
 
-  return { digest: result.digest };
+  return {
+    digest: result.digest,
+    objectChanges: result.objectChanges as Array<{ type: string; objectId?: string; objectType?: string }> | undefined,
+  };
 }
 
 // Execute a transaction with zkLogin (no sponsorship - user pays gas)
 export async function executeZkLoginTransaction(
   tx: Transaction,
   senderAddress: string
-): Promise<{ digest: string }> {
+): Promise<{ digest: string; objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }> }> {
   console.log('=== executeZkLoginTransaction START ===');
   console.log('senderAddress:', senderAddress);
 
@@ -832,14 +837,19 @@ export async function executeZkLoginTransaction(
     signature: zkLoginSignature,
     options: {
       showEffects: true,
+      showObjectChanges: true,
     },
   });
 
   console.log('=== TRANSACTION SUCCESS ===');
   console.log('Digest:', result.digest);
   console.log('Effects status:', result.effects?.status);
+  console.log('Object changes:', JSON.stringify(result.objectChanges, null, 2));
 
-  return { digest: result.digest };
+  return {
+    digest: result.digest,
+    objectChanges: result.objectChanges as Array<{ type: string; objectId?: string; objectType?: string }> | undefined,
+  };
 }
 
 // Protocol statistics from blockchain
