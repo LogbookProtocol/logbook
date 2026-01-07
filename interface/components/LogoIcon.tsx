@@ -3,23 +3,25 @@
 interface LogoIconProps {
   size?: number;
   className?: string;
+  style?: React.CSSProperties;
   monochrome?: boolean;
   blurChaos?: boolean; // Blur the three chaos squares (no animation)
 }
 
-export function LogoIcon({ size = 28, className, monochrome = false, blurChaos = false }: LogoIconProps) {
+export function LogoIcon({ size = 28, className, style, monochrome = false, blurChaos = false }: LogoIconProps) {
   const s = 5; // square size
   const g = 1.5; // gap between squares
   const fill = monochrome ? 'currentColor' : 'url(#logoGradient)';
 
   return (
     <svg
-      width={size}
-      height={size}
+      width={style ? undefined : size}
+      height={style ? undefined : size}
       viewBox="0 0 32 32"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
+      style={style}
       aria-label="Logbook logo"
       role="img"
     >

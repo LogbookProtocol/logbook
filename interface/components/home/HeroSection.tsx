@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FloatingBlocks } from '@/components/FloatingBlocks';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,6 +11,7 @@ export function HeroSection() {
   const router = useRouter();
   const { requireAuth } = useAuth();
   const { isMobile } = useDevice();
+  const [showTagline, setShowTagline] = useState(false);
 
   return (
     <section
@@ -34,14 +36,53 @@ export function HeroSection() {
             Sui
           </a>
         </div>
-        <h1
-          className="font-bold mb-8 tracking-tight leading-[1.05] select-none"
+        <div
+          className="font-bold mb-8 tracking-tight leading-[1.05] select-none cursor-pointer relative"
           style={{ fontSize: 'clamp(4.25rem, 10vw, 8rem)' }}
+          onClick={() => setShowTagline(!showTagline)}
         >
-          <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-            Verifiable.<br />Immutable.<br />Permanent.
+          {/* Invisible spacer for height */}
+          <div className="invisible" aria-hidden="true">
+            <span className="block">Verifiable.</span>
+            <span className="block">Logbook</span>
+            <span className="block">Permanent.</span>
+          </div>
+          {/* Verifiable - gray version */}
+          <span
+            className={`absolute left-0 right-0 text-center text-gray-100 dark:text-gray-900 ${showTagline ? 'opacity-0' : 'opacity-100'}`}
+            style={{ top: 0 }}
+          >
+            Verifiable.
           </span>
-        </h1>
+          {/* Verifiable - gradient version */}
+          <span
+            className={`absolute left-0 right-0 text-center bg-gradient-to-b from-cyan-400 to-blue-500 bg-clip-text text-transparent ${showTagline ? 'opacity-100' : 'opacity-0'}`}
+            style={{ top: 0 }}
+          >
+            Verifiable.
+          </span>
+          {/* Permanent - MUST be before Logbook in DOM so Logbook renders on top */}
+          <span
+            className={`absolute left-0 right-0 text-center text-gray-100 dark:text-gray-900 ${showTagline ? 'opacity-0' : 'opacity-100'}`}
+            style={{ top: 'calc(1.05em * 2)' }}
+          >
+            Permanent.
+          </span>
+          {/* Logbook - last so it renders on top */}
+          <span
+            className={`absolute left-0 right-0 text-center bg-gradient-to-b from-cyan-400 to-blue-500 bg-clip-text text-transparent ${showTagline ? 'opacity-0' : 'opacity-100'}`}
+            style={{ top: '1.05em', paddingBottom: '0.15em', marginBottom: '-0.15em' }}
+          >
+            Logbook
+          </span>
+
+          {/* Gradient group: Verifiable / Immutable / Permanent - shared gradient */}
+          <div className={`absolute inset-0 bg-gradient-to-b from-cyan-400 to-blue-500 bg-clip-text ${showTagline ? 'opacity-100' : 'opacity-0'}`}>
+            <span className="block text-transparent">Verifiable.</span>
+            <span className="block text-transparent">Immutable.</span>
+            <span className="block text-transparent">Permanent.</span>
+          </div>
+        </div>
 
         <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 mb-12 max-w-[420px] mx-auto leading-relaxed">
           Coordination platform for voting, surveys, and collective decisions - all recorded on-chain.
