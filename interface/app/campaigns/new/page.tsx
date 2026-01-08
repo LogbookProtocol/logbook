@@ -21,6 +21,11 @@ import {
   getStoredPassword,
   generatePasswordFileContent,
 } from '@/lib/crypto';
+import {
+  generateCampaignSeed,
+  getCreatorKey,
+  generatePasswordFromSeed,
+} from '@/lib/encryption-auto-recovery';
 import { parseZkLoginError, ZkLoginErrorInfo } from '@/lib/zklogin-utils';
 import { ZkLoginErrorAlert } from '@/components/ZkLoginErrorAlert';
 
@@ -175,10 +180,17 @@ export default function NewCampaignPage() {
         answers: q.answers,
       }));
       let password: string | null = null;
+      let campaignSeed = '';
 
-      // If password protected, encrypt the data
+      // If password protected, generate password with auto-recovery support
       if (isEncrypted) {
-        password = generateCampaignPassword();
+        // Generate campaign seed (UUID)
+        campaignSeed = generateCampaignSeed();
+
+        // Get creator key (Google sub or wallet signature)
+        // For now, generate password the old way for simplicity
+        // TODO: Later add wallet signature support via signPersonalMessage
+        password = generateCampaignPassword(); // Fallback to old method for now
         setGeneratedPassword(password);
 
         const encryptedData = await encryptCampaignData(
@@ -212,7 +224,8 @@ export default function NewCampaignPage() {
         description,
         questions,
         endTime,
-        isEncrypted
+        isEncrypted,
+        campaignSeed // Pass campaign_seed to smart contract
       );
 
       if (!tx) {
