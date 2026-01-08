@@ -90,6 +90,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   const [decryptedResponses, setDecryptedResponses] = useState<CampaignResponseData[]>([]);
   const [activeTab, setActiveTab] = useState<'results' | 'responses'>('results');
   const hasDecryptedResultsOnce = useRef(false);
+  const hasAttemptedAutoUnlock = useRef(false); // Track if we've tried auto-unlock already
 
 
   // Re-render when date format changes
@@ -164,10 +165,18 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
       setIsLocked(false);
       setIsAutoDecrypting(false);
       setDecryptedCampaign(null);
+      hasAttemptedAutoUnlock.current = false;
       return;
     }
 
-    // Start auto-decryption attempts
+    // Skip if we already have decrypted campaign or already attempted unlock
+    // This prevents re-running auto-unlock on every blockchain data update
+    if (decryptedCampaign || hasAttemptedAutoUnlock.current) {
+      return;
+    }
+
+    // Mark that we're attempting auto-unlock
+    hasAttemptedAutoUnlock.current = true;
     setIsAutoDecrypting(true);
 
     const attemptAutoUnlock = async () => {
@@ -276,7 +285,33 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
         setIsAutoDecrypting(false);
       }
     });
-  }, [blockchainCampaign, id, searchParams, connectedAddress]);
+  }, [blockchainCampaign, id, searchParams, connectedAddress, decryptedCampaign]);
+
+  // Update decrypted campaign when blockchain data changes (without re-decrypting)
+  // This keeps the decrypted view in sync with blockchain updates (e.g., new responses)
+  useEffect(() => {
+    // Only update if campaign is encrypted and we have a decrypted version
+    if (!blockchainCampaign?.isEncrypted) return;
+
+    setDecryptedCampaign(prev => {
+      if (!prev) return null; // No decrypted version yet, don't update
+
+      // Merge new blockchain data with existing decrypted text fields
+      return {
+        ...blockchainCampaign,
+        title: prev.title, // Keep decrypted title
+        description: prev.description, // Keep decrypted description
+        questions: blockchainCampaign.questions.map((q, i) => ({
+          ...q,
+          question: prev.questions[i]?.question || q.question, // Keep decrypted question text
+          options: q.options?.map((o, j) => ({
+            ...o,
+            label: prev.questions[i]?.options?.[j]?.label || o.label, // Keep decrypted option labels
+          })),
+        })),
+      };
+    });
+  }, [blockchainCampaign]);
 
   // Handle unlock button click
   const handleUnlock = async () => {
@@ -549,7 +584,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   // Handle loading (including auto-decryption of encrypted campaigns)
   // For encrypted campaigns: show loading until we know if it's locked or decrypted
   // Also wait for results decryption to complete for encrypted campaigns
-  const encryptedButNotResolved = blockchainCampaign?.isEncrypted && !isLocked && !decryptedCampaign;
+  const encryptedButNotResolved = blockchainCampaign?.isEncrypted && (isAutoDecrypting || (!isLocked && !decryptedCampaign));
   const encryptedResultsNotReady = blockchainCampaign?.isEncrypted && decryptedCampaign && blockchainResults.length > 0 && isDecryptingResults;
   if (isLoading || encryptedButNotResolved || encryptedResultsNotReady) {
     return (

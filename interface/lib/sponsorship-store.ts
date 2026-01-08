@@ -9,7 +9,7 @@ export const SPONSORSHIP_LIMITS = {
 // Sui config for server-side usage (keep in sync with sui-config.ts)
 const SUI_CONFIG = {
   devnet: {
-    registryId: '0x2a14c51ea75512e3e297ff3463f58b8ab9b3b68f0d7927dacbab6635de372249',
+    registryId: '0x26a0cdebbc6d22566121777ca33271ce403853d645beee48316fc3fff284d6a4',
     rpcUrl: 'https://fullnode.devnet.sui.io:443',
   },
   testnet: {
