@@ -122,6 +122,7 @@ export interface CampaignDetails {
   description: string;
   status: CampaignStatus;
   isEncrypted: boolean;
+  campaignSeed?: string; // NEW: for creator auto-recovery (only present for encrypted campaigns)
   creator: {
     address: string;
     name: string | null;

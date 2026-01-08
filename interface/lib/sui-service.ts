@@ -47,12 +47,14 @@ interface BlockchainResponse {
         contents: VecMapEntry[];
       };
     };
+    response_seed?: string[] | null; // NEW: encrypted password for auto-recovery (Option<String>)
   };
 }
 
 interface BlockchainCampaign {
   id: { id: string };
   creator: string;
+  campaign_seed: string; // NEW: for creator auto-recovery
   title: string;
   description: string;
   questions: BlockchainQuestion[];
@@ -94,6 +96,7 @@ function convertCampaign(data: BlockchainCampaign, objectId: string): CampaignDe
     description: data.description,
     status,
     isEncrypted: data.is_encrypted,
+    campaignSeed: data.is_encrypted && data.campaign_seed ? data.campaign_seed : undefined,
     creator: {
       address: data.creator,
       name: null,
@@ -489,6 +492,7 @@ export interface CampaignResponseData {
   timestamp: string;
   answers: Record<string, string | string[] | null>;
   txHash: string;
+  responseSeed?: string | null; // NEW: encrypted password for auto-recovery
 }
 
 // Fetch campaign responses from blockchain
@@ -577,6 +581,11 @@ export async function fetchCampaignResponses(campaignId: string): Promise<Campai
         answers[`q${questionIndex + 1}`] = answer;
       }
 
+      // Extract response_seed (Option<String> in Move, comes as string[] or null)
+      const responseSeed = fields.response_seed && fields.response_seed.length > 0
+        ? fields.response_seed[0]
+        : null;
+
       return {
         id: `resp-${index}`,
         respondent: `${fields.respondent.slice(0, 6)}...${fields.respondent.slice(-4)}`,
@@ -584,6 +593,7 @@ export async function fetchCampaignResponses(campaignId: string): Promise<Campai
         timestamp: new Date(parseInt(fields.timestamp)).toISOString(),
         answers,
         txHash: txDigestByRespondent.get(fields.respondent) || '',
+        responseSeed,
       };
     });
   } catch (error) {
@@ -603,7 +613,8 @@ export function buildCreateCampaignTx(
     answers: Array<{ text: string }>;
   }>,
   endTime: number, // Unix timestamp in milliseconds
-  isEncrypted: boolean = false
+  isEncrypted: boolean = false,
+  campaignSeed: string = '' // NEW: for creator auto-recovery (empty if not encrypted)
 ): Transaction | null {
   const config = getSuiConfig();
   if (!config) return null;
@@ -632,6 +643,7 @@ export function buildCreateCampaignTx(
   // Log transaction parameters for debugging
   console.log('Creating campaign transaction:', {
     registry: config.registryId,
+    campaignSeed,
     title,
     description,
     questionTypes,
@@ -649,17 +661,18 @@ export function buildCreateCampaignTx(
     target: `${config.packageId}::logbook::create_campaign`,
     arguments: [
       tx.object(config.registryId),            // 0: Campaign Registry
-      tx.pure.string(title),                   // 1: Campaign title
-      tx.pure.string(description),             // 2: Campaign description
-      tx.pure.vector('u8', questionTypes),     // 3: Question types (0=single, 1=multiple, 2=text)
-      tx.pure.vector('string', questionTexts), // 4: Question texts
-      tx.pure.vector('bool', questionRequired),// 5: Required flags
-      tx.pure.vector('string', allOptions),    // 6: Flattened answer options
-      tx.pure.vector('u64', optionsPerQuestion), // 7: Options count per question
-      tx.pure.u8(0),                           // 8: Access type (0=public)
-      tx.pure.bool(isEncrypted),               // 9: Is encrypted flag
-      tx.pure.u64(endTime),                    // 10: End time (ms timestamp)
-      tx.object('0x6'),                        // 11: Sui System Clock
+      tx.pure.string(campaignSeed),            // 1: Campaign seed (for auto-recovery)
+      tx.pure.string(title),                   // 2: Campaign title
+      tx.pure.string(description),             // 3: Campaign description
+      tx.pure.vector('u8', questionTypes),     // 4: Question types (0=single, 1=multiple, 2=text)
+      tx.pure.vector('string', questionTexts), // 5: Question texts
+      tx.pure.vector('bool', questionRequired),// 6: Required flags
+      tx.pure.vector('string', allOptions),    // 7: Flattened answer options
+      tx.pure.vector('u64', optionsPerQuestion), // 8: Options count per question
+      tx.pure.u8(0),                           // 9: Access type (0=public)
+      tx.pure.bool(isEncrypted),               // 10: Is encrypted flag
+      tx.pure.u64(endTime),                    // 11: End time (ms timestamp)
+      tx.object('0x6'),                        // 12: Sui System Clock
     ],
   });
 
@@ -669,7 +682,8 @@ export function buildCreateCampaignTx(
 // Build transaction for submitting a response
 export function buildSubmitResponseTx(
   campaignId: string,
-  answers: Record<string, string | string[]>
+  answers: Record<string, string | string[]>,
+  responseSeed: string | null = null // NEW: encrypted password for participant auto-recovery
 ): Transaction | null {
   const config = getSuiConfig();
   if (!config) return null;
@@ -702,10 +716,18 @@ export function buildSubmitResponseTx(
     }
   }
 
+  // Prepare response_seed as Option<String> for Move contract
+  // If responseSeed is null, pass empty array for Option::None
+  // If responseSeed exists, pass array with single element for Option::Some
+  const responseSeedArg = responseSeed
+    ? tx.pure.vector('string', [responseSeed])
+    : tx.pure.vector('string', []);
+
   tx.moveCall({
     target: `${config.packageId}::logbook::submit_response`,
     arguments: [
       tx.object(campaignId),
+      responseSeedArg, // Option<String> for auto-recovery
       tx.pure.vector('u64', questionIndices),
       tx.pure.vector('string', answerStrings),
       tx.object('0x6'), // Clock object

@@ -44,12 +44,16 @@ module logbook::logbook {
         // For multiple choice: "0,2,3" (comma-separated indices)
         // For text: the actual text response
         answers: VecMap<u64, String>,
+        // Encrypted campaign password for participant auto-recovery
+        // Encrypted with participant's personal key
+        response_seed: std::option::Option<String>,
     }
 
     // Campaign structure
     public struct Campaign has key {
         id: UID,
         creator: address,
+        campaign_seed: String,  // For creator auto-recovery (empty if not encrypted)
         title: String,
         description: String,
         questions: vector<Question>,
@@ -84,6 +88,7 @@ module logbook::logbook {
     // Create a new campaign
     public fun create_campaign(
         registry: &mut CampaignRegistry,
+        campaign_seed: String,  // NEW: for creator auto-recovery (empty string if not encrypted)
         title: String,
         description: String,
         question_types: vector<u8>,
@@ -148,6 +153,7 @@ module logbook::logbook {
         let campaign = Campaign {
             id: object::new(ctx),
             creator,
+            campaign_seed,
             title,
             description,
             questions,
@@ -181,6 +187,7 @@ module logbook::logbook {
     // Submit response to a campaign
     public fun submit_response(
         campaign: &mut Campaign,
+        response_seed: std::option::Option<String>,  // NEW: encrypted password for participant auto-recovery
         // Answers are provided as: question_indices and corresponding answer strings
         question_indices: vector<u64>,
         answers: vector<String>,
@@ -247,6 +254,7 @@ module logbook::logbook {
             respondent,
             timestamp: current_time,
             answers: answer_map,
+            response_seed,
         };
         campaign.responses.push_back(response);
         campaign.participants.insert(respondent, true);
@@ -345,6 +353,7 @@ module logbook::logbook {
     // === Getters ===
 
     public fun get_creator(campaign: &Campaign): address { campaign.creator }
+    public fun get_campaign_seed(campaign: &Campaign): String { campaign.campaign_seed }
     public fun get_title(campaign: &Campaign): String { campaign.title }
     public fun get_description(campaign: &Campaign): String { campaign.description }
     public fun get_questions(campaign: &Campaign): vector<Question> { campaign.questions }
@@ -378,6 +387,7 @@ module logbook::logbook {
     public fun get_response_respondent(r: &Response): address { r.respondent }
     public fun get_response_timestamp(r: &Response): u64 { r.timestamp }
     public fun get_response_answers(r: &Response): VecMap<u64, String> { r.answers }
+    public fun get_response_seed(r: &Response): std::option::Option<String> { r.response_seed }
 
     // Registry getters
     public fun get_all_campaigns(registry: &CampaignRegistry): vector<ID> { registry.all_campaigns }
