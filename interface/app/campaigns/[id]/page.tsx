@@ -897,6 +897,20 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                       </button>
+                      <button
+                        onClick={() => {
+                          removeStoredPassword(id, connectedAddress);
+                          // Force page reload to re-trigger auto-recovery
+                          window.location.reload();
+                        }}
+                        className="px-2 py-0.5 rounded text-sm transition flex items-center gap-1 bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/30"
+                        title="Delete password from localStorage (test)"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span>Delete</span>
+                      </button>
                       <label
                         className="flex items-center gap-2 cursor-pointer"
                         title="Include password in links and QR"
