@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
+import { useSignAndExecuteTransaction, useCurrentAccount, useSignPersonalMessage } from '@mysten/dapp-kit';
 import { SuiClient } from '@mysten/sui/client';
 import { useCampaignStore } from '@/store/campaignStore';
 import { Question, QuestionType, AnswerOption, CampaignAccessMode } from '@/types/campaign';
@@ -33,6 +33,7 @@ export default function NewCampaignPage() {
   const router = useRouter();
   const account = useCurrentAccount();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage();
 
   const {
     formData,
@@ -187,11 +188,28 @@ export default function NewCampaignPage() {
         // Generate campaign seed (UUID)
         campaignSeed = generateCampaignSeed();
 
-        // Get creator key (Google sub or wallet signature)
-        // For now, generate password the old way for simplicity
-        // TODO: Later add wallet signature support via signPersonalMessage
-        password = generateCampaignPassword(); // Fallback to old method for now
-        setGeneratedPassword(password);
+        try {
+          // Get creator key (Google sub or wallet signature)
+          // Wrap signPersonalMessage for wallet users
+          const signMessageWrapper = account ? async (message: string) => {
+            const result = await signPersonalMessage({ message: new TextEncoder().encode(message) });
+            return result.signature;
+          } : undefined;
+
+          const creatorKey = await getCreatorKey(campaignSeed, signMessageWrapper);
+
+          // Generate deterministic password from seed and creator key
+          password = generatePasswordFromSeed(campaignSeed, creatorKey);
+          setGeneratedPassword(password);
+
+          console.log('[Campaign Creation] Using deterministic password for auto-recovery');
+        } catch (error) {
+          console.error('[Campaign Creation] Failed to generate deterministic password:', error);
+          // Fallback to random password if auto-recovery fails
+          password = generateCampaignPassword();
+          setGeneratedPassword(password);
+          console.log('[Campaign Creation] Fallback to random password (no auto-recovery)');
+        }
 
         const encryptedData = await encryptCampaignData(
           {
