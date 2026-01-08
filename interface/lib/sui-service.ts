@@ -353,10 +353,22 @@ export async function fetchCampaignResults(campaignId: string): Promise<Question
       });
 
       for (const tx of txs.data) {
-        // Get sender from transaction
         const sender = tx.transaction?.data?.sender;
-        if (sender && tx.digest) {
-          // Store the most recent tx for each sender (in case of multiple)
+        if (!sender || !tx.digest) continue;
+
+        // Only include submit_response transactions (not create_campaign)
+        const inputs = tx.transaction?.data?.transaction;
+        if (!inputs || inputs.kind !== 'ProgrammableTransaction') continue;
+
+        const packageCalls = inputs.transactions?.filter((t: any) => {
+          if (t.MoveCall) {
+            const fn = t.MoveCall.function;
+            return fn === 'submit_response';
+          }
+          return false;
+        }) as any[];
+
+        if (packageCalls && packageCalls.length > 0) {
           txDigestByRespondent.set(sender, tx.digest);
         }
       }
@@ -422,11 +434,11 @@ export async function fetchCampaignResults(campaignId: string): Promise<Question
         percentage: totalVotes > 0 ? Math.round((votes[i] / totalVotes) * 100) : 0,
       }));
 
-      // Find winner (highest votes) - only if there's a clear winner (no tie)
+      // Find winners (all options with highest votes, if votes > 0)
       const maxVotes = Math.max(...results.map((r) => r.votes));
-      const leadingOptions = results.filter((r) => r.votes === maxVotes);
-      // Only set winner if there's exactly one leader and they have votes
-      const winner = leadingOptions.length === 1 && maxVotes > 0 ? leadingOptions[0].id : undefined;
+      const winners = maxVotes > 0
+        ? results.filter((r) => r.votes === maxVotes).map((r) => r.id)
+        : undefined;
 
       return {
         id: `q${index + 1}`,
@@ -434,7 +446,7 @@ export async function fetchCampaignResults(campaignId: string): Promise<Question
         type: questionType as 'single-choice' | 'multiple-choice',
         totalVotes,
         results,
-        winner,
+        winners,
       };
     });
   } catch (error) {
@@ -508,13 +520,33 @@ export async function fetchCampaignResponses(campaignId: string): Promise<Campai
 
       for (const tx of txs.data) {
         const sender = tx.transaction?.data?.sender;
-        if (sender && tx.digest) {
+        if (!sender || !tx.digest) continue;
+
+        // Only include submit_response transactions (not create_campaign)
+        const inputs = tx.transaction?.data?.transaction;
+        if (!inputs || inputs.kind !== 'ProgrammableTransaction') continue;
+
+        const packageCalls = inputs.transactions?.filter((t: any) => {
+          if (t.MoveCall) {
+            const fn = t.MoveCall.function;
+            return fn === 'submit_response';
+          }
+          return false;
+        }) as any[];
+
+        if (packageCalls && packageCalls.length > 0) {
           txDigestByRespondent.set(sender, tx.digest);
         }
       }
     } catch (e) {
       console.warn('Could not fetch transaction history:', e);
     }
+
+    // Get question types to properly convert answers
+    const questionTypes = data.questions.map((q) => {
+      const qType = q.fields.question_type;
+      return QUESTION_TYPES_REVERSE[qType as keyof typeof QUESTION_TYPES_REVERSE] || 'text';
+    });
 
     return data.responses.map((response, index) => {
       const fields = response.fields;
@@ -524,7 +556,24 @@ export async function fetchCampaignResponses(campaignId: string): Promise<Campai
       const answers: Record<string, string | string[] | null> = {};
       for (const entry of answersContents) {
         const questionIndex = parseInt(entry.fields.key);
-        const answer = entry.fields.value;
+        let answer: string | string[] | null = entry.fields.value;
+
+        // For non-encrypted campaigns, answers are stored as indices ("0", "1", "1,2")
+        // Convert them to option IDs ("opt1", "opt2", "opt2,opt3") for frontend
+        if (!data.is_encrypted) {
+          const questionType = questionTypes[questionIndex];
+
+          if (questionType === 'single-choice' && typeof answer === 'string' && /^\d+$/.test(answer)) {
+            // Single choice: "0" -> "opt1", "1" -> "opt2"
+            const optionIndex = parseInt(answer);
+            answer = `opt${optionIndex + 1}`;
+          } else if (questionType === 'multiple-choice' && typeof answer === 'string' && answer.includes(',')) {
+            // Multiple choice: "0,2" -> ["opt1", "opt3"]
+            const indices = answer.split(',').map(idx => parseInt(idx.trim()));
+            answer = indices.map(idx => `opt${idx + 1}`);
+          }
+        }
+
         answers[`q${questionIndex + 1}`] = answer;
       }
 
@@ -798,6 +847,8 @@ export async function executeZkLoginSponsoredTransaction(
   console.log('Digest:', result.digest);
   console.log('Effects status:', result.effects?.status);
   console.log('Object changes:', JSON.stringify(result.objectChanges, null, 2));
+  console.log('Full result keys:', Object.keys(result));
+  console.log('Full result:', JSON.stringify(result, null, 2));
 
   return {
     digest: result.digest,
@@ -845,6 +896,8 @@ export async function executeZkLoginTransaction(
   console.log('Digest:', result.digest);
   console.log('Effects status:', result.effects?.status);
   console.log('Object changes:', JSON.stringify(result.objectChanges, null, 2));
+  console.log('Full result keys:', Object.keys(result));
+  console.log('Full result:', JSON.stringify(result, null, 2));
 
   return {
     digest: result.digest,

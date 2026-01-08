@@ -17,6 +17,7 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
   const [mounted, setMounted] = useState(false);
   const [showMoreWallets, setShowMoreWallets] = useState(false);
   const [lastUsedWallet, setLastUsedWallet] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const wallets = useWallets();
   const { mutate: connect } = useConnectWallet();
 
@@ -60,6 +61,7 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
 
   const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
+    setError(null);
     try {
       // Save scroll position to restore after login
       sessionStorage.setItem('zklogin_scroll_position', String(window.scrollY));
@@ -67,6 +69,8 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
       window.location.href = authUrl;
     } catch (error) {
       console.error('Failed to initialize zkLogin:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect. Please try again.';
+      setError(errorMessage);
       setIsLoadingGoogle(false);
     }
   };
@@ -156,6 +160,18 @@ export function ConnectOptionsModal({ open, onOpenChange }: ConnectOptionsModalP
 
           {/* Content */}
           <div className="p-6 space-y-1">
+            {/* Error Message */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <svg className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+                </div>
+              </div>
+            )}
+
             {/* Google zkLogin */}
             <button
               onClick={handleGoogleLogin}

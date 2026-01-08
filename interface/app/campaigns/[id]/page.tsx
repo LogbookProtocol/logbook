@@ -2,7 +2,7 @@
 
 export const runtime = 'edge';
 
-import { useState, useEffect, Suspense, use, useCallback } from 'react';
+import { useState, useEffect, Suspense, use, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import Link from 'next/link';
@@ -30,7 +30,6 @@ import {
   isValidPassword,
 } from '@/lib/crypto';
 
-type TabType = 'overview' | 'results' | 'responses';
 
 function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -38,10 +37,6 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const account = useCurrentAccount();
   const { requireAuth } = useAuth();
-  const fromTab = searchParams.get('from') as 'created' | 'participated' | null;
-  const initialTab = searchParams.get('tab') as TabType | null;
-
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'overview');
   const [, forceUpdate] = useState(0);
   const [copiedQR, setCopiedQR] = useState(false);
   const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
@@ -71,13 +66,14 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   const [blockchainResults, setBlockchainResults] = useState<QuestionResult[]>([]);
   const [blockchainResponses, setBlockchainResponses] = useState<CampaignResponseData[]>([]);
   const [hasParticipatedState, setHasParticipatedState] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Encrypted campaign state
   const [isLocked, setIsLocked] = useState(false);
+  const [isAutoDecrypting, setIsAutoDecrypting] = useState(false); // True while trying auto-decrypt
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isDecrypting, setIsDecrypting] = useState(false);
@@ -86,11 +82,11 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   const [showPassword, setShowPassword] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [decryptedResults, setDecryptedResults] = useState<QuestionResult[]>([]);
+  const [isDecryptingResults, setIsDecryptingResults] = useState(false);
+  const [decryptedResponses, setDecryptedResponses] = useState<CampaignResponseData[]>([]);
+  const [activeTab, setActiveTab] = useState<'results' | 'responses'>('results');
+  const hasDecryptedResultsOnce = useRef(false);
 
-  // Sync tab with URL param when navigating between campaigns
-  useEffect(() => {
-    setActiveTab(initialTab || 'overview');
-  }, [initialTab, id]);
 
   // Re-render when date format changes
   useEffect(() => {
@@ -152,6 +148,9 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     if (source !== 'mock') {
       // Initial fetch with loading state
       fetchData(true);
+    } else {
+      // Mock mode - no loading needed
+      setIsLoading(false);
     }
   }, [fetchData]);
 
@@ -159,9 +158,43 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   useEffect(() => {
     if (!blockchainCampaign?.isEncrypted) {
       setIsLocked(false);
+      setIsAutoDecrypting(false);
       setDecryptedCampaign(null);
       return;
     }
+
+    // Check if we have a password to try
+    const keyParam = searchParams.get('key');
+    const storedPassword = getStoredPassword(id, connectedAddress);
+
+    // Debug: List all localStorage keys related to campaign passwords
+    if (typeof window !== 'undefined') {
+      const allCampaignPasswords = Object.keys(localStorage)
+        .filter(key => key.startsWith('campaign_password_'))
+        .map(key => ({ key, hasValue: !!localStorage.getItem(key) }));
+      console.log('[Decrypt Debug] All campaign passwords in localStorage:', allCampaignPasswords);
+    }
+
+    console.log('[Decrypt Debug]', {
+      campaignId: id,
+      connectedAddress,
+      keyParam,
+      storedPassword: storedPassword ? '***found***' : 'not found',
+      isValidPassword: storedPassword ? isValidPassword(storedPassword) : false,
+    });
+    const passwordToTry = (keyParam && isValidPassword(keyParam)) ? keyParam :
+                          (storedPassword && isValidPassword(storedPassword)) ? storedPassword : null;
+
+    // No password found, show locked state immediately
+    if (!passwordToTry) {
+      console.log('[Decrypt Debug] No password to try, showing locked state');
+      setIsLocked(true);
+      setIsAutoDecrypting(false);
+      return;
+    }
+
+    // We have a password, start auto-decryption
+    setIsAutoDecrypting(true);
 
     const tryDecrypt = async (password: string) => {
       try {
@@ -197,25 +230,12 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
         storePassword(id, password, connectedAddress);
       } catch {
         setIsLocked(true);
+      } finally {
+        setIsAutoDecrypting(false);
       }
     };
 
-    // Check URL param first
-    const keyParam = searchParams.get('key');
-    if (keyParam && isValidPassword(keyParam)) {
-      tryDecrypt(keyParam);
-      return;
-    }
-
-    // Check localStorage
-    const storedPassword = getStoredPassword(id, connectedAddress);
-    if (storedPassword && isValidPassword(storedPassword)) {
-      tryDecrypt(storedPassword);
-      return;
-    }
-
-    // No password found, show locked state
-    setIsLocked(true);
+    tryDecrypt(passwordToTry);
   }, [blockchainCampaign, id, searchParams, connectedAddress]);
 
   // Handle unlock button click
@@ -295,16 +315,59 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     const decryptResultsData = async () => {
       if (!blockchainCampaign?.isEncrypted || blockchainResults.length === 0) {
         setDecryptedResults([]);
+        setIsDecryptingResults(false);
         return;
       }
 
       const password = getStoredPassword(id, connectedAddress);
       if (!password) {
         setDecryptedResults([]);
+        setDecryptedResponses([]);
+        setIsDecryptingResults(false);
         return;
       }
 
+      // Only show loading on initial decryption, not on updates
+      if (!hasDecryptedResultsOnce.current) {
+        setIsDecryptingResults(true);
+      }
+
       try {
+        // First, decrypt individual response answers - we need these for vote counting
+        const decryptedResponsesData = await Promise.all(
+          blockchainResponses.map(async (response) => {
+            try {
+              // Decrypt the answers object
+              // answers is Record<string, string | string[] | null>
+              const decryptedAnswersObj: Record<string, string | string[] | null> = {};
+
+              for (const [questionId, answerValue] of Object.entries(response.answers)) {
+                if (answerValue === null) {
+                  decryptedAnswersObj[questionId] = null;
+                } else if (Array.isArray(answerValue)) {
+                  // Multiple choice - decrypt each option ID
+                  const decryptedArray = await Promise.all(
+                    answerValue.map(val => decryptData(val, password))
+                  );
+                  decryptedAnswersObj[questionId] = decryptedArray;
+                } else {
+                  // Single choice or text - decrypt the value
+                  decryptedAnswersObj[questionId] = await decryptData(answerValue, password);
+                }
+              }
+
+              return { ...response, answers: decryptedAnswersObj };
+            } catch {
+              // If decryption fails, keep original
+              return response;
+            }
+          })
+        );
+        setDecryptedResponses(decryptedResponsesData);
+
+        // Decrypt results (questions, options, text responses)
+        // For encrypted campaigns, blockchain can't count votes (encrypted data)
+        // so we need to count votes client-side from decrypted responses
         const decrypted = await Promise.all(
           blockchainResults.map(async (q) => {
             // Decrypt question text
@@ -313,6 +376,21 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
               decryptedQuestion = await decryptData(q.question, password);
             } catch {
               // Keep original if decryption fails
+            }
+
+            // Decrypt text responses first (needed for all question types)
+            let decryptedTextResponses = q.textResponses;
+            if (q.type === 'text' && q.textResponses) {
+              decryptedTextResponses = await Promise.all(
+                q.textResponses.map(async (response) => {
+                  try {
+                    const decryptedText = await decryptData(response.text, password);
+                    return { ...response, text: decryptedText };
+                  } catch {
+                    return response; // Keep original if decryption fails
+                  }
+                })
+              );
             }
 
             // Decrypt option labels for choice questions
@@ -328,23 +406,67 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                   }
                 })
               );
-            }
 
-            // Decrypt text responses
-            let decryptedTextResponses = q.textResponses;
-            if (q.type === 'text' && q.textResponses) {
-              decryptedTextResponses = await Promise.all(
-                q.textResponses.map(async (response) => {
-                  try {
-                    const decryptedText = await decryptData(response.text, password);
-                    return { ...response, text: decryptedText };
-                  } catch {
-                    return response; // Keep original if decryption fails
+              // CLIENT-SIDE VOTE COUNTING for encrypted campaigns
+              // Count votes from decrypted responses since blockchain can't decrypt
+              const voteCounts: Record<string, number> = {};
+              decryptedResultsArray.forEach(opt => {
+                voteCounts[opt.id] = 0;
+              });
+
+              console.log(`[Vote Counting] Question ${q.id}: Counting votes from ${decryptedResponsesData.length} responses`);
+
+              // Count votes from decrypted responses
+              decryptedResponsesData.forEach((response, respIndex) => {
+                const answer = response.answers[q.id];
+                console.log(`[Vote Counting] Response ${respIndex} for ${q.id}:`, answer);
+                if (answer) {
+                  if (Array.isArray(answer)) {
+                    // Multiple choice - each answer is an index like "0", "1"
+                    answer.forEach(idx => {
+                      const optId = `opt${parseInt(idx) + 1}`;
+                      console.log(`[Vote Counting]   Multiple choice: index "${idx}" -> ${optId}`);
+                      if (voteCounts[optId] !== undefined) {
+                        voteCounts[optId]++;
+                      }
+                    });
+                  } else if (q.type === 'single-choice') {
+                    // Single choice - answer is an index like "0", "1", "2"
+                    const optId = `opt${parseInt(answer) + 1}`;
+                    console.log(`[Vote Counting]   Single choice: index "${answer}" -> ${optId}`);
+                    if (voteCounts[optId] !== undefined) {
+                      voteCounts[optId]++;
+                    }
                   }
-                })
-              );
+                }
+              });
+
+              console.log(`[Vote Counting] Question ${q.id} final counts:`, voteCounts);
+
+              // Calculate total and percentages
+              const totalVotes = Object.values(voteCounts).reduce((a, b) => a + b, 0);
+              decryptedResultsArray = decryptedResultsArray.map(opt => ({
+                ...opt,
+                votes: voteCounts[opt.id] || 0,
+                percentage: totalVotes > 0 ? Math.round((voteCounts[opt.id] / totalVotes) * 100) : 0,
+              }));
+
+              // Find winners (all options with highest votes, if votes > 0)
+              const maxVotes = Math.max(...decryptedResultsArray.map((r) => r.votes));
+              const winners = maxVotes > 0
+                ? decryptedResultsArray.filter((r) => r.votes === maxVotes).map((r) => r.id)
+                : undefined;
+
+              return {
+                ...q,
+                question: decryptedQuestion,
+                results: decryptedResultsArray,
+                textResponses: decryptedTextResponses,
+                winners,
+              };
             }
 
+            // For text questions or questions without results
             return {
               ...q,
               question: decryptedQuestion,
@@ -354,17 +476,23 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
           })
         );
         setDecryptedResults(decrypted);
+
+        hasDecryptedResultsOnce.current = true;
       } catch {
         setDecryptedResults([]);
+        setDecryptedResponses([]);
+      } finally {
+        setIsDecryptingResults(false);
       }
     };
 
     decryptResultsData();
-  }, [blockchainCampaign?.isEncrypted, blockchainResults, id, connectedAddress]);
+  }, [blockchainCampaign?.isEncrypted, blockchainResults, blockchainResponses, id, connectedAddress]);
 
   // Get campaign - from blockchain (decrypted if available) or mock data
   const rawCampaign = dataSource !== 'mock' ? blockchainCampaign : getCampaignById(id);
-  const campaign = decryptedCampaign || rawCampaign;
+  // For encrypted campaigns, only use decrypted data (never show encrypted data)
+  const campaign = rawCampaign?.isEncrypted ? decryptedCampaign : (decryptedCampaign || rawCampaign);
   // Use decrypted results for encrypted campaigns, otherwise use raw blockchain results
   const resultsQuestions = blockchainCampaign?.isEncrypted && decryptedResults.length > 0
     ? decryptedResults
@@ -378,8 +506,12 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     finalizationTx: '',
   } : mockCampaignResults;
 
-  // Handle loading
-  if (isLoading) {
+  // Handle loading (including auto-decryption of encrypted campaigns)
+  // For encrypted campaigns: show loading until we know if it's locked or decrypted
+  // Also wait for results decryption to complete for encrypted campaigns
+  const encryptedButNotResolved = blockchainCampaign?.isEncrypted && !isLocked && !decryptedCampaign;
+  const encryptedResultsNotReady = blockchainCampaign?.isEncrypted && decryptedCampaign && blockchainResults.length > 0 && isDecryptingResults;
+  if (isLoading || encryptedButNotResolved || encryptedResultsNotReady) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-12 flex justify-center">
         <svg className="animate-spin h-8 w-8 text-cyan-500" fill="none" viewBox="0 0 24 24">
@@ -504,74 +636,28 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
       </div>
     );
   }
-  const responses = dataSource !== 'mock' ? blockchainResponses : mockCampaignResponses;
+  // Use decrypted responses for encrypted campaigns, otherwise use raw blockchain responses
+  const responses = dataSource !== 'mock'
+    ? (blockchainCampaign?.isEncrypted && decryptedResponses.length > 0 ? decryptedResponses : blockchainResponses)
+    : mockCampaignResponses;
   const statusInfo = CAMPAIGN_STATUSES[campaign.status];
 
   // Whether the user has participated in this campaign
   const hasParticipated = dataSource !== 'mock' ? hasParticipatedState : false;
 
-  // Check if current user is the creator (supports both wallet and zkLogin)
-  const isCreator = dataSource === 'mock'
-    ? true
-    : connectedAddress === campaign.creator.address;
-
-
-  const daysLeft = campaign.dates.endDate
-    ? Math.ceil((new Date(campaign.dates.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null;
-
-  // Build tabs - Responses visible to everyone
-  const tabs: { id: TabType; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'responses', label: `Responses (${responses.length})` },
-    { id: 'results', label: 'Results' },
-  ];
-
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12">
+    <div className="max-w-2xl mx-auto px-6 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <Link
-          href={backLink}
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition mb-4 inline-block"
-        >
-          ← Campaigns
-        </Link>
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2 flex-wrap">
-              {/* Campaign type icon */}
-              {campaign.isEncrypted ? (
-                <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0" title="Password Protected">
-                  <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </div>
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center flex-shrink-0" title="Open Campaign">
-                  <svg className="w-4 h-4 text-cyan-600 dark:text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-              )}
-              <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">{campaign.title}</h1>
-              <span
-                className={`px-3 py-1 rounded-full text-sm ${
-                  campaign.status === 'active'
-                    ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                    : 'bg-gray-500/20 text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                {statusInfo.label}
-              </span>
-            </div>
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <Link
+            href={backLink}
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition"
+          >
+            ← Campaigns
+          </Link>
 
-            <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
-              <span>by {campaign.creator.address.slice(0, 5)}...{campaign.creator.address.slice(-4)}</span>
-            </div>
-          </div>
-
-          {/* CTA */}
+          {/* CTA Button - aligned to the right */}
           {campaign.status === 'active' && !hasParticipated && (
             <button
               onClick={() => {
@@ -581,152 +667,141 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                   router.push(targetPath);
                 }
               }}
-              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-medium hover:opacity-90 transition"
+              className="px-6 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-medium hover:opacity-90 transition"
             >
               Participate
             </button>
           )}
-          {campaign.status === 'active' && hasParticipated && (
-            <div className="px-4 py-2 rounded-lg bg-green-500/20 text-green-600 dark:text-green-400 font-medium flex items-center gap-2 text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              You have participated
-            </div>
-          )}
         </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex items-end justify-between mb-8 border-b border-gray-200 dark:border-white/[0.06]">
-        <div className="flex gap-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
-                activeTab === tab.id
-                  ? 'text-gray-900 dark:text-white border-cyan-500'
-                  : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        {dataSource !== 'mock' && campaign.status === 'active' && (
-          <div className="pb-3">
-            <LastUpdated
-              lastUpdated={lastUpdated}
-              onRefresh={handleManualRefresh}
-              isLoading={isRefreshing}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Overview Tab */}
-      {activeTab === 'overview' && (
-        <div className="space-y-8">
-          {/* Stats cards */}
-          <div className="grid grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">{campaign.stats.responses}</div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Responses</div>
-            </div>
-            <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">{campaign.questions.length}</div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Questions</div>
-            </div>
-            <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {formatDate(campaign.dates.created)}
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Started</div>
-            </div>
-            <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <div className="text-lg font-bold text-gray-900 dark:text-white">
-                {campaign.dates.endDate ? formatEndDateTimeParts(campaign.dates.endDate).datePart : '—'}
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                {campaign.status === 'ended' ? 'Ended' : 'Ends'}
-              </div>
-              {campaign.dates.endDate && (
-                <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  until end of 23:59 GMT
-                </div>
+        <div className="flex-1">
+          <div className="flex items-start justify-between gap-4 mb-1 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              {campaign.isEncrypted ? (
+                <span title="Password Protected">
+                  <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </span>
+              ) : (
+                <span title="Open Campaign">
+                  <svg className="w-5 h-5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                  </svg>
+                </span>
               )}
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{campaign.title}</h1>
+              <span
+                className={`px-2.5 py-1 rounded-full text-sm ${
+                  campaign.status === 'active'
+                    ? 'bg-green-500/20 text-green-600 dark:text-green-400'
+                    : 'bg-gray-500/20 text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {statusInfo.label}
+              </span>
             </div>
           </div>
+        </div>
 
-          {/* Description */}
-          <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">About this campaign</h2>
-            <div className="text-gray-600 dark:text-gray-400 whitespace-pre-line">{campaign.description}</div>
-          </section>
-
-          {/* Questions preview */}
-          <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Questions ({campaign.questions.length})
-            </h2>
-            <div className="space-y-4">
-              {campaign.questions.map((q, index) => (
-                <div key={q.id} className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center text-xs text-gray-500 dark:text-gray-400">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-gray-900 dark:text-white">{q.question}</div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      {q.type === 'single-choice' && `Single choice • ${q.options?.length} options`}
-                      {q.type === 'multiple-choice' && `Multiple choice • ${q.options?.length} options`}
-                      {q.type === 'text' && 'Text answer'}
-                      {q.required && ' • Required'}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Share Campaign */}
-          <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Share Campaign</h2>
-
-              {/* Password management for encrypted campaigns */}
+        {/* Info Table */}
+        <div className="mt-4 border border-gray-200 dark:border-white/[0.06] rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <tbody>
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02] w-28">
+                  Campaign
+                </td>
+                <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">
+                  <a
+                    href={getSuiscanObjectUrl(campaign.onChain.objectId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-1"
+                    title={campaign.onChain.objectId}
+                  >
+                    {campaign.onChain.objectId.slice(0, 10)}...{campaign.onChain.objectId.slice(-6)}
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </td>
+              </tr>
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                  Creator
+                </td>
+                <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">
+                  <a
+                    href={getSuiscanAccountUrl(campaign.creator.address)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-1"
+                    title={campaign.creator.address}
+                  >
+                    {campaign.creator.address.slice(0, 6)}...{campaign.creator.address.slice(-4)}
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </td>
+              </tr>
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                  Start Date
+                </td>
+                <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">
+                  {formatDate(campaign.dates.created)}
+                </td>
+              </tr>
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                  End Date
+                </td>
+                <td className="px-4 py-2.5">
+                  {campaign.dates.endDate ? (
+                    <>
+                      <span className="text-gray-900 dark:text-gray-100">{formatEndDateTimeParts(campaign.dates.endDate).datePart}</span>
+                      {formatEndDateTimeParts(campaign.dates.endDate).timePart && (
+                        <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{formatEndDateTimeParts(campaign.dates.endDate).timePart}</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-900 dark:text-gray-100">No end date</span>
+                  )}
+                </td>
+              </tr>
+              {/* Access Type row */}
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                  Access Type
+                </td>
+                <td className="px-4 py-2.5">
+                  {campaign.isEncrypted ? (
+                    <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Password Protected
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                      </svg>
+                      Open
+                    </span>
+                  )}
+                </td>
+              </tr>
+              {/* Access row - only for encrypted campaigns with stored password */}
               {campaign.isEncrypted && getStoredPassword(id, connectedAddress) && (
-                <div className="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                  {/* Password field */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-amber-700 dark:text-amber-400 mb-2">
-                      Campaign Password
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={getStoredPassword(id, connectedAddress) || ''}
-                          readOnly
-                          className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-700 rounded-lg text-gray-900 dark:text-gray-100 font-mono text-sm pr-10"
-                        />
-                        <button
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                          title={showPassword ? 'Hide password' : 'Show password'}
-                        >
-                          {showPassword ? (
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            </svg>
-                          ) : (
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
+                <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                  <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                    Access
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <button
                         onClick={() => {
                           const password = getStoredPassword(id, connectedAddress);
@@ -736,412 +811,439 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                             setTimeout(() => setPasswordCopied(false), 2000);
                           }
                         }}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition ${
+                        className={`px-2 py-0.5 rounded text-sm transition flex items-center gap-1 ${
                           passwordCopied
                             ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
-                            : 'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/20'
+                            : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/30'
                         }`}
-                        title="Copy password"
                       >
-                        {passwordCopied ? (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                        )}
-                        {passwordCopied ? 'Copied' : 'Copy'}
+                        <span>Password</span>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
                       </button>
-                      <button
-                        onClick={() => {
-                          removeStoredPassword(id, connectedAddress);
-                          window.location.reload();
-                        }}
-                        className="px-3 py-2 rounded-lg bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-500/30 transition"
-                        title="Forget password"
+                      <label
+                        className="flex items-center gap-2 cursor-pointer"
+                        title="Include password in links and QR"
                       >
-                        Forget
-                      </button>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Add to link/QR</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={includePasswordInLink}
+                          onClick={() => handleIncludePasswordChange(!includePasswordInLink)}
+                          className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${
+                            includePasswordInLink
+                              ? 'bg-amber-500'
+                              : 'bg-gray-200 dark:bg-gray-700'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                              includePasswordInLink ? 'translate-x-[17px]' : 'translate-x-[2px]'
+                            }`}
+                          />
+                        </button>
+                      </label>
                     </div>
-                  </div>
-
-                  {/* Include password in link toggle */}
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={includePasswordInLink}
-                      onChange={(e) => handleIncludePasswordChange(e.target.checked)}
-                      className="w-4 h-4 text-amber-500 border-amber-300 rounded focus:ring-amber-500"
-                    />
-                    <span className="text-sm text-amber-700 dark:text-amber-400">
-                      Include password in link and QR code
-                    </span>
-                  </label>
-                  {includePasswordInLink && (
-                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
-                      Anyone with the link or QR code will be able to access the campaign without entering a password.
-                    </p>
-                  )}
-                </div>
+                  </td>
+                </tr>
               )}
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                  Share
+                </td>
+                <td className="px-4 py-2.5">
+                  {/* Hidden QR for canvas operations */}
+                  <img
+                    id="campaign-qr-code"
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/campaigns/${campaign.id}${includePasswordInLink && campaign.isEncrypted ? `?key=${getStoredPassword(campaign.id, connectedAddress) || ''}` : ''}`)}`}
+                    alt="Campaign QR Code"
+                    className="hidden"
+                    crossOrigin="anonymous"
+                  />
 
-              {/* Hidden QR for canvas operations */}
-              <img
-                id="campaign-qr-code"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/campaigns/${campaign.id}${includePasswordInLink && campaign.isEncrypted ? `?key=${getStoredPassword(campaign.id, connectedAddress) || ''}` : ''}`)}`}
-                alt="Campaign QR Code"
-                className="hidden"
-                crossOrigin="anonymous"
-              />
-              <div className="flex flex-wrap gap-3">
-                {/* Copy Link */}
-                <button
-                  onClick={() => {
-                    const password = includePasswordInLink && campaign.isEncrypted ? getStoredPassword(campaign.id, connectedAddress) : null;
-                    copyLink(campaign.id, undefined, password || undefined);
-                  }}
-                  className={`px-4 py-2 rounded-lg transition text-sm font-medium flex items-center gap-2 ${
-                    isCopied(campaign.id)
-                      ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
-                      : 'bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/20'
-                  }`}
-                >
-                  {isCopied(campaign.id) ? (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                  )}
-                  {isCopied(campaign.id) ? 'Copied!' : 'Copy Link'}
-                </button>
-                {/* Copy QR */}
-                <button
-                  onClick={async () => {
-                    const img = document.getElementById('campaign-qr-code') as HTMLImageElement;
-                    if (!img) return;
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 200;
-                    canvas.height = 200;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
-                    ctx.drawImage(img, 0, 0, 200, 200);
-                    canvas.toBlob(async (blob) => {
-                      if (!blob) return;
-                      try {
-                        await navigator.clipboard.write([
-                          new ClipboardItem({ 'image/png': blob })
-                        ]);
-                        setCopiedQR(true);
-                        setTimeout(() => setCopiedQR(false), 2000);
-                      } catch {
-                        // Fallback: download instead
+                  <div className="flex flex-wrap items-center gap-1.5">
+
+                    <button
+                      onClick={() => {
+                        const password = includePasswordInLink && campaign.isEncrypted ? getStoredPassword(campaign.id, connectedAddress) : null;
+                        copyLink(campaign.id, undefined, password || undefined);
+                      }}
+                      className={`px-2 py-0.5 rounded text-sm transition flex items-center gap-1 ${
+                        isCopied(campaign.id)
+                          ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
+                          : includePasswordInLink && campaign.isEncrypted
+                            ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/30'
+                            : 'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/20'
+                      }`}
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                      {isCopied(campaign.id) ? 'Copied!' : 'Link'}
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        const img = document.getElementById('campaign-qr-code') as HTMLImageElement;
+                        if (!img) return;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 200;
+                        canvas.height = 200;
+                        const ctx = canvas.getContext('2d');
+                        if (!ctx) return;
+                        ctx.drawImage(img, 0, 0, 200, 200);
+                        canvas.toBlob(async (blob) => {
+                          if (!blob) return;
+                          try {
+                            await navigator.clipboard.write([
+                              new ClipboardItem({ 'image/png': blob })
+                            ]);
+                            setCopiedQR(true);
+                            setTimeout(() => setCopiedQR(false), 2000);
+                          } catch {
+                            const link = document.createElement('a');
+                            link.download = `logbook-qr-${campaign.id.slice(0, 8)}.png`;
+                            link.href = canvas.toDataURL('image/png');
+                            link.click();
+                          }
+                        }, 'image/png');
+                      }}
+                      className={`px-2 py-0.5 rounded text-sm transition flex items-center gap-1 ${
+                        copiedQR
+                          ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
+                          : includePasswordInLink && campaign.isEncrypted
+                            ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/30'
+                            : 'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/20'
+                      }`}
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                      </svg>
+                      {copiedQR ? 'Copied!' : 'QR'}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const img = document.getElementById('campaign-qr-code') as HTMLImageElement;
+                        if (!img) return;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 200;
+                        canvas.height = 200;
+                        const ctx = canvas.getContext('2d');
+                        if (!ctx) return;
+                        ctx.drawImage(img, 0, 0, 200, 200);
                         const link = document.createElement('a');
                         link.download = `logbook-qr-${campaign.id.slice(0, 8)}.png`;
                         link.href = canvas.toDataURL('image/png');
                         link.click();
-                      }
-                    }, 'image/png');
-                  }}
-                  className={`px-4 py-2 rounded-lg transition text-sm font-medium flex items-center gap-2 ${
-                    copiedQR
-                      ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
-                      : 'bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/20'
-                  }`}
-                >
-                  {copiedQR ? (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                    </svg>
-                  )}
-                  {copiedQR ? 'Copied!' : 'Copy QR'}
-                </button>
-                {/* Download QR */}
-                <button
-                  onClick={() => {
-                    const img = document.getElementById('campaign-qr-code') as HTMLImageElement;
-                    if (!img) return;
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 200;
-                    canvas.height = 200;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
-                    ctx.drawImage(img, 0, 0, 200, 200);
-                    const link = document.createElement('a');
-                    link.download = `logbook-qr-${campaign.id.slice(0, 8)}.png`;
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                  }}
-                  className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/20 transition text-sm font-medium flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download QR
-                </button>
-              </div>
-          </section>
-
-          {/* On-chain info */}
-          <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">On-chain Record</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Object ID</span>
-                <a
-                  href={getSuiscanObjectUrl(campaign.onChain.objectId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-cyan-600 dark:text-cyan-400 hover:underline"
-                >
-                  {campaign.onChain.objectId.slice(0, 16)}... ↗
-                </a>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Network</span>
-                <span className="text-gray-600 dark:text-gray-400">
-                  {dataSource === 'devnet' ? 'Sui Devnet' : dataSource === 'testnet' ? 'Sui Testnet' : 'Sui Mainnet'}
-                </span>
-              </div>
-            </div>
-          </section>
+                      }}
+                      className={`px-2 py-0.5 rounded transition text-sm flex items-center gap-1 ${
+                        includePasswordInLink && campaign.isEncrypted
+                          ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/30'
+                          : 'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/20'
+                      }`}
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Save QR
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02] align-top">
+                  Description
+                </td>
+                <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100 whitespace-pre-line">
+                  {campaign.description || 'No description provided'}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
-      {/* Results Tab */}
-      {activeTab === 'results' && (
-        <div className="space-y-6">
-          {/* Summary stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">{results.totalResponses}</div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Total Responses</div>
+      {/* Tabs */}
+      <div className="mb-6">
+        <div className="flex items-center border-b border-gray-200 dark:border-white/[0.06]">
+          <button
+            onClick={() => setActiveTab('results')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition -mb-px ${
+              activeTab === 'results'
+                ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            Results
+          </button>
+          <button
+            onClick={() => setActiveTab('responses')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition -mb-px ${
+              activeTab === 'responses'
+                ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            Responses ({responses.length})
+          </button>
+          {dataSource !== 'mock' && campaign.status === 'active' && (
+            <div className="ml-auto">
+              <LastUpdated
+                lastUpdated={lastUpdated}
+                onRefresh={handleManualRefresh}
+                isLoading={isRefreshing}
+              />
             </div>
-            <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{results.completionRate}%</div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Completion Rate</div>
-            </div>
-            <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">{campaign.questions.length}</div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Questions</div>
-            </div>
-          </div>
-
-          {/* Results by question */}
-          {results.questions.map((q, index) => (
-            <div
-              key={q.id}
-              className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]"
-            >
-              <div className="flex items-start gap-3 mb-4">
-                <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                  {index + 1}
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-gray-900 dark:text-white font-medium">{q.question}</h3>
-                  <div className="text-sm text-gray-500 mt-1">{q.totalVotes || q.totalResponses} responses</div>
-                </div>
-              </div>
-
-              {/* Choice results */}
-              {(q.type === 'single-choice' || q.type === 'multiple-choice') && q.results && (
-                <div className="space-y-3">
-                  {q.results.map((option) => (
-                    <div key={option.id}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span
-                          className={
-                            option.id === q.winner
-                              ? 'text-cyan-600 dark:text-cyan-400 font-medium'
-                              : 'text-gray-700 dark:text-gray-300'
-                          }
-                        >
-                          {option.id === q.winner && '★ '}
-                          {option.label}
-                        </span>
-                        <span className="text-gray-500 dark:text-gray-400">
-                          {option.votes} ({option.percentage}%)
-                        </span>
-                      </div>
-                      <div className="h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            option.id === q.winner
-                              ? 'bg-gradient-to-r from-cyan-500 to-blue-500'
-                              : 'bg-gray-400 dark:bg-white/30'
-                          }`}
-                          style={{ width: `${option.percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Text responses as table */}
-              {q.type === 'text' && (
-                <div>
-                  {q.textResponses && q.textResponses.length > 0 ? (
-                    <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-white/[0.06]">
-                      <table className="w-full">
-                        <thead className="bg-gray-50 dark:bg-white/[0.02]">
-                          <tr>
-                            <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 w-28">
-                              Respondent
-                            </th>
-                            <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-                              Answer
-                            </th>
-                            <th className="text-right px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                              Transaction Block
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-white/[0.06]">
-                          {q.textResponses.map((response, i) => (
-                            <tr key={i} className="bg-white dark:bg-white/[0.01]">
-                              <td className="px-4 py-3">
-                                <a
-                                  href={getSuiscanAccountUrl(response.respondentAddress)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-cyan-600 dark:text-cyan-400 text-xs hover:underline"
-                                >
-                                  <code>{response.respondent}</code> ↗
-                                </a>
-                              </td>
-                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap">
-                                {response.text}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                {response.txDigest ? (
-                                  <a
-                                    href={getSuiscanTxUrl(response.txDigest)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-cyan-600 dark:text-cyan-400 text-xs hover:underline"
-                                  >
-                                    ↗
-                                  </a>
-                                ) : (
-                                  <span className="text-gray-400 text-xs">—</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-gray-500 dark:text-gray-400 text-sm">
-                      No text responses yet
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* On-chain verification */}
-          {results.finalizedOnChain && results.finalizationTx && (
-            <section className="p-6 rounded-xl bg-green-500/5 border border-green-500/20">
-              <h2 className="text-lg font-semibold text-green-600 dark:text-green-400 mb-4">On-chain Verification</h2>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Finalization TX</span>
-                  <a
-                    href={getSuiscanTxUrl(results.finalizationTx)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-cyan-600 dark:text-cyan-400 hover:underline"
-                  >
-                    {results.finalizationTx} ↗
-                  </a>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">
-                  Results are permanently recorded on the Sui blockchain and can be independently verified.
-                </p>
-              </div>
-            </section>
           )}
         </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'results' && (
+        <div className="space-y-4 mb-6">
+          {campaign.questions.map((q, index) => {
+            const questionResult = resultsQuestions.find(r => r.id === q.id);
+
+            // Find user's response for this question
+            const userResponse = responses.find(resp =>
+              resp.respondentAddress && connectedAddress &&
+              resp.respondentAddress.toLowerCase() === connectedAddress.toLowerCase()
+            );
+            // Get the user's answer (already decrypted if campaign is encrypted)
+            const userAnswerForQuestion = userResponse?.answers?.[q.id];
+
+            // Debug logging
+            if (index === 0) {
+              console.log('[Highlight Debug]', {
+                questionId: q.id,
+                questionType: q.type,
+                connectedAddress,
+                allRespondentAddresses: responses.map(r => ({
+                  id: r.id,
+                  addr: r.respondentAddress,
+                  matches: r.respondentAddress?.toLowerCase() === connectedAddress?.toLowerCase()
+                })),
+                userResponse: userResponse ? {
+                  id: userResponse.id,
+                  respondent: userResponse.respondent,
+                  respondentAddress: userResponse.respondentAddress,
+                  allAnswers: userResponse.answers
+                } : null,
+                userAnswerForQuestion,
+              });
+            }
+
+            return (
+              <div key={q.id} className="p-5 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="text-sm text-gray-400 dark:text-gray-500 font-medium">{index + 1}.</span>
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-900 dark:text-white">{q.question}</div>
+                    <div className="text-sm text-gray-500 mt-1">
+                      {q.type === 'single-choice' && 'Single choice'}
+                      {q.type === 'multiple-choice' && 'Multiple choice'}
+                      {q.type === 'text' && 'Text answer'}
+                      {questionResult && ` • ${questionResult.totalVotes || questionResult.totalResponses || 0} responses`}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Results for choice questions */}
+                {(q.type === 'single-choice' || q.type === 'multiple-choice') && questionResult?.results && (
+                  <div className="space-y-2 mt-4">
+                    {questionResult.results.map((option, optIndex) => {
+                      // Check if this option is the user's answer
+                      // For encrypted campaigns: userAnswerForQuestion is decrypted index like "0", "1", "2"
+                      // For open campaigns: userAnswerForQuestion is option ID like "opt1", "opt2", "opt3"
+                      // For multiple-choice: userAnswerForQuestion is an array of strings
+                      let isUserAnswer = false;
+                      if (blockchainCampaign?.isEncrypted) {
+                        // For encrypted campaigns, convert decrypted index to optN format
+                        if (Array.isArray(userAnswerForQuestion)) {
+                          // Multiple choice: check if any decrypted index matches this option
+                          isUserAnswer = userAnswerForQuestion.some(idx => {
+                            const optId = `opt${parseInt(idx) + 1}`;
+                            return optId === option.id;
+                          });
+                        } else if (userAnswerForQuestion !== undefined && userAnswerForQuestion !== null) {
+                          // Single choice: convert decrypted index to optN
+                          const optId = `opt${parseInt(userAnswerForQuestion as string) + 1}`;
+                          isUserAnswer = optId === option.id;
+                        }
+                      } else {
+                        // For open campaigns, direct comparison
+                        isUserAnswer = Array.isArray(userAnswerForQuestion)
+                          ? userAnswerForQuestion.includes(option.id)
+                          : userAnswerForQuestion === option.id;
+                      }
+
+                      // Debug first option of first question
+                      if (index === 0 && optIndex === 0) {
+                        console.log('[Option Check]', {
+                          optionId: option.id,
+                          optionLabel: option.label,
+                          userAnswerForQuestion,
+                          isArray: Array.isArray(userAnswerForQuestion),
+                          isUserAnswer,
+                          comparison: Array.isArray(userAnswerForQuestion)
+                            ? `${JSON.stringify(userAnswerForQuestion)}.includes(${option.id})`
+                            : `${userAnswerForQuestion} === ${option.id}`
+                        });
+                      }
+
+                      return (
+                        <div
+                          key={option.id}
+                          className={`p-2 rounded-lg ${
+                            isUserAnswer
+                              ? 'bg-cyan-500/10 dark:bg-cyan-500/10 border border-cyan-500/20'
+                              : ''
+                          }`}
+                        >
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className={
+                              isUserAnswer && questionResult.winners?.includes(option.id)
+                                ? 'text-cyan-700 dark:text-cyan-400 font-medium'
+                                : isUserAnswer
+                                  ? 'text-gray-900 dark:text-gray-100 font-medium'
+                                  : questionResult.winners?.includes(option.id)
+                                    ? 'text-cyan-600 dark:text-cyan-400 font-medium'
+                                    : 'text-gray-600 dark:text-gray-400'
+                            }>
+                              {questionResult.winners?.includes(option.id) && (
+                                <span className={isUserAnswer ? 'text-cyan-600 dark:text-cyan-400' : ''}>★ </span>
+                              )}
+                              {option.label}
+                            </span>
+                            <span className="text-gray-500">{option.votes} ({option.percentage}%)</span>
+                          </div>
+                          <div className="h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                isUserAnswer && questionResult.winners?.includes(option.id)
+                                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500'
+                                  : questionResult.winners?.includes(option.id)
+                                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500'
+                                    : 'bg-gray-400 dark:bg-white/30'
+                              }`}
+                              style={{ width: `${option.percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Text responses */}
+                {q.type === 'text' && questionResult?.textResponses && questionResult.textResponses.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {questionResult.textResponses.slice(0, 5).map((response, i) => {
+                      const isCurrentUser = response.respondent && connectedAddress &&
+                                          responses.find(r =>
+                                            r.respondent === response.respondent &&
+                                            r.respondentAddress?.toLowerCase() === connectedAddress.toLowerCase()
+                                          );
+
+                      return (
+                        <div
+                          key={i}
+                          className={`text-sm p-3 rounded-lg ${
+                            isCurrentUser
+                              ? 'text-gray-900 dark:text-gray-100 bg-cyan-500/10 dark:bg-cyan-500/10 border border-cyan-500/20'
+                              : 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]'
+                          }`}
+                        >
+                          <span className={isCurrentUser ? "text-cyan-600 dark:text-cyan-400 font-medium" : "text-gray-400 dark:text-gray-500"}>
+                            {response.respondent}:
+                          </span> {response.text}
+                        </div>
+                      );
+                    })}
+                    {questionResult.textResponses.length > 5 && (
+                      <div className="text-sm text-gray-500">+{questionResult.textResponses.length - 5} more responses</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {/* Responses Tab */}
       {activeTab === 'responses' && (
-        <div className="space-y-4">
-          {responses.length === 0 ? (
-            <div className="p-12 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] text-center">
-              <div className="text-gray-400 dark:text-gray-500 mb-2">
-                <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-              <p className="text-gray-500 dark:text-gray-400">No responses yet</p>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Share your campaign to start collecting responses</p>
-            </div>
-          ) : (
+        <div className="mb-6">
+          {responses.length > 0 ? (
             <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-white/[0.06]">
-              <table className="w-full">
+              <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-white/[0.02]">
                   <tr>
-                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4">
-                      Respondent
-                    </th>
-                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4">Time</th>
-                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4">Answers</th>
-                    <th className="text-right px-6 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4">Transaction Block</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Respondent</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Time</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-500 dark:text-gray-400">TX</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-white/[0.06]">
-                  {responses.map((resp) => (
-                    <tr key={resp.id} className="bg-white dark:bg-white/[0.01]">
-                      <td className="px-6 py-4">
-                        {resp.respondentAddress ? (
-                          <a
-                            href={getSuiscanAccountUrl(resp.respondentAddress)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-cyan-600 dark:text-cyan-400 text-sm hover:underline"
-                          >
-                            <code>{resp.respondent}</code> ↗
-                          </a>
-                        ) : (
-                          <code className="text-cyan-600 dark:text-cyan-400 text-sm">{resp.respondent}</code>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm">
-                        {formatDateTime(resp.timestamp)}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm">
-                        {Object.keys(resp.answers).length} answers
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        {resp.txHash ? (
-                          <a
-                            href={getSuiscanTxUrl(resp.txHash)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-cyan-600 dark:text-cyan-400 text-sm hover:underline"
-                          >
-                            ↗
-                          </a>
-                        ) : (
-                          <span className="text-gray-400 text-sm">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {responses.map((resp) => {
+                    const isCurrentUser = resp.respondentAddress && connectedAddress &&
+                                         resp.respondentAddress.toLowerCase() === connectedAddress.toLowerCase();
+                    return (
+                      <tr
+                        key={resp.id}
+                        className={isCurrentUser
+                          ? "bg-cyan-500/10 dark:bg-cyan-500/10"
+                          : "bg-white dark:bg-white/[0.01]"
+                        }
+                      >
+                        <td className="px-4 py-3">
+                          {resp.respondentAddress ? (
+                            <a
+                              href={getSuiscanAccountUrl(resp.respondentAddress)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={isCurrentUser
+                                ? "text-cyan-600 dark:text-cyan-400 hover:underline font-mono font-medium"
+                                : "text-cyan-600 dark:text-cyan-400 hover:underline font-mono"
+                              }
+                            >
+                              {resp.respondent} ↗
+                            </a>
+                          ) : (
+                            <span className="text-gray-600 dark:text-gray-400 font-mono">{resp.respondent}</span>
+                          )}
+                        </td>
+                        <td className={`px-4 py-3 ${isCurrentUser ? "text-gray-600 dark:text-gray-300" : "text-gray-500 dark:text-gray-400"}`}>
+                          {formatDateTime(resp.timestamp)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {resp.txHash ? (
+                            <a
+                              href={getSuiscanTxUrl(resp.txHash)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={isCurrentUser
+                                ? "text-green-600 dark:text-green-400 hover:underline"
+                                : "text-cyan-600 dark:text-cyan-400 hover:underline"
+                              }
+                            >
+                              ↗
+                            </a>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+              No responses yet
             </div>
           )}
         </div>

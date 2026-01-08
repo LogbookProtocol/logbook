@@ -10,6 +10,7 @@ import { ConnectOptionsModal } from '@/components/ConnectOptionsModal';
 import { Footer } from '@/components/Footer';
 import { LogoIcon } from '@/components/LogoIcon';
 import { MobileNavigation } from '@/components/MobileNavigation';
+import { SessionExpiryWarning } from '@/components/SessionExpiryWarning';
 import { useDevice } from '@/hooks/useDevice';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -253,14 +254,14 @@ function LayoutContent({ children }: { children: ReactNode }) {
         <div className="flex items-center justify-between h-14 px-6 relative pointer-events-none">
           {/* Logo + Hamburger (mobile) */}
           <div className="flex items-center gap-1 pointer-events-auto">
-            <Link href="/" className="flex items-center gap-1 text-lg whitespace-nowrap tracking-tight">
-              <LogoIcon size={24} />
-              {!showMobileUI && (
+            {!showMobileUI && (
+              <Link href="/" className="flex items-center gap-1 text-lg whitespace-nowrap tracking-tight">
+                <LogoIcon size={24} />
                 <><span className="font-bold bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent">Logbook</span><sup className="text-[0.55em] font-semibold text-blue-500 -ml-0.5">β</sup></>
-              )}
-            </Link>
+              </Link>
+            )}
 
-            {/* Hamburger menu button - right after logo on mobile */}
+            {/* Hamburger menu button - mobile only */}
             {showMobileUI && (
               <div className="relative" ref={mobileMenuRef}>
                 <button
@@ -268,13 +269,27 @@ function LayoutContent({ children }: { children: ReactNode }) {
                   className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
                   aria-label="Menu"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                   </svg>
                 </button>
                 {isMobileMenuOpen && (
                   <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden z-50">
                     <nav className="py-2">
+                      <Link
+                        href="/"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition ${
+                          pathname === '/'
+                            ? 'bg-gray-100 dark:bg-gray-700 text-cyan-600 dark:text-cyan-400'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        Home
+                      </Link>
                       <Link
                         href="/campaigns"
                         onClick={() => setIsMobileMenuOpen(false)}
@@ -661,6 +676,9 @@ function LayoutContent({ children }: { children: ReactNode }) {
         open={isConnectModalOpen}
         onOpenChange={setIsConnectModalOpen}
       />
+
+      {/* Session Expiry Warning */}
+      {zkLoginData && <SessionExpiryWarning />}
     </div>
   );
 }

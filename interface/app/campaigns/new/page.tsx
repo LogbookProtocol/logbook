@@ -4,11 +4,12 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
+import { SuiClient } from '@mysten/sui/client';
 import { useCampaignStore } from '@/store/campaignStore';
 import { Question, QuestionType, AnswerOption, CampaignAccessMode } from '@/types/campaign';
 import { formatDate, getEndTimeDisplay, localDateToEndOfDayUTC } from '@/lib/format-date';
 import { DatePicker } from '@/components/ui/DatePicker';
-import { getDataSource } from '@/lib/sui-config';
+import { getDataSource, getSuiConfig } from '@/lib/sui-config';
 import { buildCreateCampaignTx, executeZkLoginSponsoredTransaction, executeZkLoginTransaction, getSponsorshipStatus } from '@/lib/sui-service';
 import { getReferrer } from '@/lib/navigation';
 import { getTransactionCost, fetchSuiPrice } from '@/lib/sui-gas-price';
@@ -17,6 +18,7 @@ import {
   generateCampaignPassword,
   encryptCampaignData,
   storePassword,
+  getStoredPassword,
   generatePasswordFileContent,
 } from '@/lib/crypto';
 import { parseZkLoginError, ZkLoginErrorInfo } from '@/lib/zklogin-utils';
@@ -44,9 +46,14 @@ export default function NewCampaignPage() {
   const [deployError, setDeployError] = useState<string | null>(null);
   const [zkLoginError, setZkLoginError] = useState<ZkLoginErrorInfo | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+
+  // Refs for form fields to restore focus
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
+  const questionsSectionRef = useRef<HTMLDivElement>(null);
   const [, forceUpdate] = useState(0);
   const [backLink, setBackLink] = useState('/campaigns');
-  const [expectedParticipants, setExpectedParticipants] = useState<string>('');
+  const [expectedParticipants, setExpectedParticipants] = useState<string>('10');
   const [txCostFiat, setTxCostFiat] = useState<number>(0);
   const [suiPrice, setSuiPrice] = useState<number>(0);
   const { currency, currencySymbol } = useCurrency();
@@ -59,9 +66,11 @@ export default function NewCampaignPage() {
   const [countdown, setCountdown] = useState(5);
   const [errorCopied, setErrorCopied] = useState(false);
 
-  // Get referrer on client side
+  // Get referrer and saved participants count on client side
   useEffect(() => {
     setBackLink(getReferrer('/campaigns'));
+    const saved = localStorage.getItem('logbook_expected_participants');
+    if (saved) setExpectedParticipants(saved);
   }, []);
 
   // Fetch gas cost and SUI price
@@ -81,6 +90,17 @@ export default function NewCampaignPage() {
     window.addEventListener('date-format-changed', handleDateFormatChange);
     return () => window.removeEventListener('date-format-changed', handleDateFormatChange);
   }, []);
+
+  // Close question editor when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (editingQuestionId && questionsSectionRef.current && !questionsSectionRef.current.contains(e.target as Node)) {
+        setEditingQuestionId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [editingQuestionId]);
 
   // Validation
   const isValid = formData.title.trim() && formData.questions.length > 0;
@@ -207,7 +227,16 @@ export default function NewCampaignPage() {
         if (isEncrypted && password) {
           // Store password
           if (campaignId) {
+            console.log('[Store Password Debug]', {
+              campaignId,
+              password: '***hidden***',
+              connectedAddress,
+              passwordLength: password.length,
+            });
             storePassword(campaignId, password, connectedAddress);
+            // Verify it was stored
+            const retrieved = getStoredPassword(campaignId, connectedAddress);
+            console.log('[Store Password Debug] Verification:', retrieved ? '***stored successfully***' : 'FAILED TO STORE');
           }
         }
         setCreatedCampaignId(campaignId);
@@ -215,13 +244,79 @@ export default function NewCampaignPage() {
       };
 
       // Helper function to extract campaign ID from transaction result
-      const extractCampaignId = (objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }>) => {
-        console.log('extractCampaignId - objectChanges:', objectChanges);
-        const createdCampaign = objectChanges?.find(
-          (change) => change.type === 'created' && change.objectType?.includes('::logbook::Campaign')
-        );
-        console.log('extractCampaignId - createdCampaign:', createdCampaign);
-        return createdCampaign?.objectId || null;
+      const extractCampaignId = async (digest: string, objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }>) => {
+        console.log('extractCampaignId - digest:', digest, 'objectChanges:', objectChanges);
+
+        // If objectChanges is provided and has data, use it directly
+        if (objectChanges && objectChanges.length > 0) {
+          const createdCampaign = objectChanges.find(
+            (change) => change.type === 'created' && change.objectType?.includes('::logbook::Campaign')
+          );
+          console.log('extractCampaignId - createdCampaign from objectChanges:', createdCampaign);
+          if (createdCampaign?.objectId) {
+            return createdCampaign.objectId;
+          }
+        }
+
+        // If objectChanges is undefined or empty, fetch transaction details
+        console.log('extractCampaignId - objectChanges empty/undefined, fetching transaction details');
+        try {
+          const config = getSuiConfig();
+          if (!config) {
+            console.error('Failed to get Sui config');
+            return null;
+          }
+
+          const client = new SuiClient({ url: config.rpcUrl });
+
+          // Retry mechanism - transaction may not be indexed immediately
+          const maxRetries = 5;
+          const retryDelay = 1000; // 1 second
+
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+              console.log(`extractCampaignId - Fetch attempt ${attempt}/${maxRetries}`);
+
+              // Fetch full transaction details with objectChanges
+              const txDetails = await client.getTransactionBlock({
+                digest,
+                options: {
+                  showObjectChanges: true,
+                },
+              });
+
+              console.log('Transaction details fetched:', JSON.stringify(txDetails.objectChanges, null, 2));
+              const createdCampaign = txDetails.objectChanges?.find(
+                (change: any) => change.type === 'created' && change.objectType?.includes('::logbook::Campaign')
+              );
+              console.log('extractCampaignId - createdCampaign from API:', createdCampaign);
+
+              if (createdCampaign) {
+                return (createdCampaign as any)?.objectId || null;
+              }
+
+              // If no campaign found but no error, return null
+              console.log('extractCampaignId - No campaign object found in transaction');
+              return null;
+            } catch (err: any) {
+              console.log(`extractCampaignId - Attempt ${attempt} failed:`, err?.message || err);
+
+              // If this is the last attempt, throw
+              if (attempt === maxRetries) {
+                throw err;
+              }
+
+              // Wait before retrying
+              console.log(`extractCampaignId - Waiting ${retryDelay}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
+          }
+
+          return null;
+        } catch (error) {
+          console.error('Failed to fetch transaction details after retries:', error);
+          return null;
+        }
       };
 
       // Use zkLogin transaction for Google users
@@ -231,7 +326,7 @@ export default function NewCampaignPage() {
           if (canUseSponsorship) {
             const result = await executeZkLoginSponsoredTransaction(tx, zkLoginAddress);
             console.log('Campaign deployed with sponsorship:', result.digest);
-            const campaignId = extractCampaignId(result.objectChanges);
+            const campaignId = await extractCampaignId(result.digest, result.objectChanges);
             handleDeploySuccess(campaignId);
             return;
           }
@@ -239,7 +334,7 @@ export default function NewCampaignPage() {
           // Fall back to non-sponsored zkLogin (user pays gas)
           const result = await executeZkLoginTransaction(tx, zkLoginAddress);
           console.log('Campaign deployed with zkLogin (user paid gas):', result.digest);
-          const campaignId = extractCampaignId(result.objectChanges);
+          const campaignId = await extractCampaignId(result.digest, result.objectChanges);
           handleDeploySuccess(campaignId);
         } catch (error) {
           const err = error as Error & { code?: string };
@@ -273,12 +368,12 @@ export default function NewCampaignPage() {
       signAndExecute(
         { transaction: tx },
         {
-          onSuccess: (result) => {
+          onSuccess: async (result) => {
             console.log('Campaign deployed:', result);
 
             // Extract campaign ID from result
-            const resultWithChanges = result as { objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }> };
-            const campaignId = extractCampaignId(resultWithChanges.objectChanges);
+            const resultWithChanges = result as { digest?: string; objectChanges?: Array<{ type: string; objectId?: string; objectType?: string }> };
+            const campaignId = await extractCampaignId(resultWithChanges.digest || '', resultWithChanges.objectChanges);
             handleDeploySuccess(campaignId);
           },
           onError: (error) => {
@@ -311,6 +406,70 @@ export default function NewCampaignPage() {
     addQuestion(newQuestion);
     setEditingQuestionId(newQuestion.id);
   };
+
+  // Check if form has any saved data
+  const hasAnyData = formData.title.trim() || formData.description.trim() || formData.endDate ||
+    formData.questions.some(q => q.text.trim());
+
+  // Restore focus state on mount
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+
+      // Check for saved focus state
+      const savedFocusField = localStorage.getItem('logbook_focus_field');
+      const savedEditingId = localStorage.getItem('logbook_editing_question_id');
+
+      // Restore editing state if question exists
+      if (savedEditingId && formData.questions.some(q => q.id === savedEditingId)) {
+        setEditingQuestionId(savedEditingId);
+      }
+
+      // Restore focus based on saved field
+      setTimeout(() => {
+        if (savedFocusField === 'title') {
+          titleInputRef.current?.focus();
+        } else if (savedFocusField === 'description') {
+          descriptionInputRef.current?.focus();
+        } else if (!hasAnyData && !savedEditingId) {
+          // Focus on title only if form is completely empty (fresh start)
+          titleInputRef.current?.focus();
+        }
+        // Clear saved focus state after restoring
+        localStorage.removeItem('logbook_focus_field');
+        localStorage.removeItem('logbook_editing_question_id');
+      }, 100);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Store refs to track state for cleanup
+  const questionsRef = useRef(formData.questions);
+  questionsRef.current = formData.questions;
+  const editingQuestionIdRef = useRef(editingQuestionId);
+  editingQuestionIdRef.current = editingQuestionId;
+
+  // Save focus state and cleanup when leaving the page
+  useEffect(() => {
+    return () => {
+      // Save current focus state
+      const activeElement = document.activeElement;
+      if (activeElement === titleInputRef.current) {
+        localStorage.setItem('logbook_focus_field', 'title');
+      } else if (activeElement === descriptionInputRef.current) {
+        localStorage.setItem('logbook_focus_field', 'description');
+      } else if (editingQuestionIdRef.current) {
+        localStorage.setItem('logbook_editing_question_id', editingQuestionIdRef.current);
+      }
+
+      // Remove questions with empty text on unmount
+      questionsRef.current
+        .filter(q => !q.text.trim())
+        .forEach(q => deleteQuestion(q.id));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Deploying State - Show deployment progress screen
   if (deployState === 'deploying') {
@@ -396,34 +555,89 @@ export default function NewCampaignPage() {
   // Review Mode
   if (isReviewMode) {
     return (
-      <div className="max-w-2xl mx-auto px-6 py-12">
-        <div className="mb-8">
+      <div className="max-w-2xl mx-auto px-6 py-8">
+        <div className="mb-6">
           <button
             onClick={() => setReviewMode(false)}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition mb-4 inline-flex items-center gap-1"
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition mb-3 inline-flex items-center gap-1"
           >
             ← Back to editing
           </button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">Review Campaign</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Check everything before deploying</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent">Review Campaign</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Check everything before deploying</p>
         </div>
 
         {/* Campaign Info */}
-        <div className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{formData.title}</h2>
-          {formData.description && (
-            <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">{formData.description}</p>
-          )}
-          {formData.endDate && (
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              Ends: {formatDate(formData.endDate)}, {getEndTimeDisplay(formData.endDate)}
-            </div>
-          )}
+        <div className="rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] overflow-hidden mb-6">
+          <table className="w-full text-sm">
+            <tbody>
+              {/* Title row */}
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                  Title
+                </td>
+                <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">
+                  {formData.title}
+                </td>
+              </tr>
+
+              {/* End Date row */}
+              {formData.endDate && (
+                <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                  <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                    End Date
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className="text-gray-900 dark:text-gray-100">
+                      {formatDate(formData.endDate)}
+                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{getEndTimeDisplay(formData.endDate)}</span>
+                    </span>
+                  </td>
+                </tr>
+              )}
+
+              {/* Access Type row */}
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                  Access Type
+                </td>
+                <td className="px-4 py-2.5">
+                  {formData.accessMode === 'password_protected' ? (
+                    <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Password Protected
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                      </svg>
+                      Open
+                    </span>
+                  )}
+                </td>
+              </tr>
+
+              {/* Description row */}
+              {formData.description && (
+                <tr>
+                  <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                    Description
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">
+                    {formData.description}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
 
         {/* Questions */}
-        <div className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] mb-6">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-4">
+        <div className="p-5 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] mb-6">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
             Questions ({formData.questions.length})
           </h3>
           <div className="space-y-4">
@@ -445,7 +659,15 @@ export default function NewCampaignPage() {
                       <div className="mt-2 space-y-1">
                         {q.answers.map((a) => (
                           <div key={a.id} className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                            <span className="text-gray-400">○</span>
+                            {q.type === 'single_choice' ? (
+                              <svg className="w-4 h-4 text-gray-400" viewBox="0 0 16 16" fill="none">
+                                <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4 text-gray-400" viewBox="0 0 16 16" fill="none">
+                                <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                              </svg>
+                            )}
                             {a.text}
                           </div>
                         ))}
@@ -459,7 +681,7 @@ export default function NewCampaignPage() {
         </div>
 
         {/* Simulate Error Toggle (for testing) */}
-        <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 mb-6">
+        <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 mb-6">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -495,72 +717,125 @@ export default function NewCampaignPage() {
 
   // Edit Mode
   return (
-    <div className="max-w-2xl mx-auto px-6 py-12">
-      {/* Header */}
-      <div className="mb-8">
-        <Link
-          href={backLink}
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition mb-4 inline-flex items-center gap-1"
-        >
-          ← Back
-        </Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">New Campaign</h1>
+    <div className="max-w-2xl mx-auto px-6 py-8">
+      {/* Header with back link */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <Link
+            href={backLink}
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition mb-2 inline-flex items-center gap-1"
+          >
+            ← Back
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent">New Campaign</h1>
+        </div>
+        <div className="flex gap-2">
+          <TestDataButton
+            onFill={(data) => {
+              updateFormData({
+                title: data.title,
+                description: data.description,
+                endDate: data.endDate,
+              });
+              formData.questions.forEach(q => deleteQuestion(q.id));
+              data.questions.forEach(q => addQuestion(q));
+            }}
+            onClear={resetForm}
+          />
+        </div>
       </div>
 
       {/* Campaign Type Selector */}
-      <CampaignTypeSelector
-        accessMode={formData.accessMode}
-        onSelect={setAccessMode}
-      />
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Campaign Type
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Open Campaign */}
+          <button
+            type="button"
+            onClick={() => setAccessMode('open')}
+            className={`p-4 rounded-xl border-2 transition text-left ${
+              formData.accessMode === 'open'
+                ? 'border-cyan-500 bg-cyan-500/5'
+                : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <svg className="w-5 h-5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              <span className={`font-medium ${formData.accessMode === 'open' ? 'text-cyan-600 dark:text-cyan-400' : 'text-gray-900 dark:text-white'}`}>
+                Open
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Anyone with the link can view and participate
+            </p>
+          </button>
 
-      {/* Fill with test data button */}
-      <TestDataButton
-        onFill={(data) => {
-          updateFormData({
-            title: data.title,
-            description: data.description,
-            endDate: data.endDate,
-          });
-          // Clear existing questions and add new ones
-          formData.questions.forEach(q => deleteQuestion(q.id));
-          data.questions.forEach(q => addQuestion(q));
-        }}
-      />
+          {/* Password Protected */}
+          <button
+            type="button"
+            onClick={() => setAccessMode('password_protected')}
+            className={`p-4 rounded-xl border-2 transition text-left ${
+              formData.accessMode === 'password_protected'
+                ? 'border-cyan-500 bg-cyan-500/5'
+                : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span className={`font-medium ${formData.accessMode === 'password_protected' ? 'text-cyan-600 dark:text-cyan-400' : 'text-gray-900 dark:text-white'}`}>
+                Password Protected
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              End-to-end encrypted, password required
+            </p>
+          </button>
+        </div>
 
-      {/* Campaign Info */}
-      <div className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] mb-6">
-        <div className="space-y-4">
+      </div>
+
+      {/* Campaign Details */}
+      <div className="rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] mb-6 p-5">
+        <div className="space-y-5">
           {/* Title */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Title <span className="text-red-500">*</span>
             </label>
             <input
+              ref={titleInputRef}
               type="text"
               value={formData.title}
               onChange={(e) => updateFormData({ title: e.target.value })}
-              className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition"
-              placeholder="Campaign title"
+              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition placeholder:text-gray-400"
+              placeholder="Enter campaign title"
             />
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Description
             </label>
             <textarea
+              ref={descriptionInputRef}
               value={formData.description}
               onChange={(e) => updateFormData({ description: e.target.value })}
-              rows={3}
-              className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition resize-none"
-              placeholder="Describe your campaign..."
+              rows={2}
+              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition resize-none placeholder:text-gray-400"
+              placeholder="Describe your campaign (optional)"
             />
           </div>
 
           {/* End Date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               End Date <span className="text-red-500">*</span>
             </label>
             <DatePicker
@@ -573,60 +848,87 @@ export default function NewCampaignPage() {
         </div>
       </div>
 
-      {/* Questions */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Questions {formData.questions.length > 0 && `(${formData.questions.length})`}
-          </h2>
+      {/* Questions Section */}
+      <div className="mb-6" ref={questionsSectionRef}>
+        {/* Section Header */}
+        <div className="flex items-center justify-between mb-3">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Questions {formData.questions.length > 0 && <span className="text-gray-400 font-normal">({formData.questions.length})</span>}
+          </label>
+          {formData.questions.length > 0 && (
+            <button
+              type="button"
+              onClick={handleAddQuestion}
+              className="text-sm font-medium text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition flex items-center gap-1"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add
+            </button>
+          )}
         </div>
 
-        <div className="space-y-4">
-          {formData.questions.map((question, index) => (
-            <QuestionCard
-              key={question.id}
-              question={question}
-              index={index}
-              isEditing={editingQuestionId === question.id}
-              onEdit={() => setEditingQuestionId(question.id)}
-              onSave={() => setEditingQuestionId(null)}
-              onUpdate={(data) => updateQuestion(question.id, data)}
-              onDelete={() => deleteQuestion(question.id)}
-            />
-          ))}
-        </div>
-
-        <button
-          onClick={handleAddQuestion}
-          className="w-full mt-4 py-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:border-cyan-500 hover:text-cyan-500 transition font-medium"
-        >
-          + Add Question
-        </button>
+        {formData.questions.length === 0 ? (
+          /* Empty state */
+          <button
+            type="button"
+            onClick={handleAddQuestion}
+            className="w-full p-8 rounded-xl border-2 border-dashed border-gray-200 dark:border-white/10 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition group"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center group-hover:bg-cyan-500/10 transition">
+                <svg className="w-6 h-6 text-gray-400 group-hover:text-cyan-500 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <span className="text-sm text-gray-500 dark:text-gray-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition">
+                Add your first question
+              </span>
+            </div>
+          </button>
+        ) : (
+          /* Questions list */
+          <div className="space-y-2">
+            {formData.questions.map((question, index) => (
+              <QuestionRow
+                key={question.id}
+                question={question}
+                index={index}
+                isEditing={editingQuestionId === question.id}
+                onEdit={() => setEditingQuestionId(question.id)}
+                onSave={() => setEditingQuestionId(null)}
+                onUpdate={(data) => updateQuestion(question.id, data)}
+                onDelete={() => deleteQuestion(question.id)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Gas Cost Calculator */}
-      <GasCostCalculator
-        expectedParticipants={expectedParticipants}
-        setExpectedParticipants={setExpectedParticipants}
-        txCostFiat={txCostFiat}
-        suiPrice={suiPrice}
-        currencySymbol={currencySymbol}
-      />
-
-      {/* Review Button */}
-      <button
-        onClick={() => setReviewMode(true)}
-        disabled={!isValid}
-        className="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        Review Campaign
-      </button>
+      {/* Bottom bar: gas calculator + review button */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+        <GasCostCalculator
+          expectedParticipants={expectedParticipants}
+          setExpectedParticipants={setExpectedParticipants}
+          txCostFiat={txCostFiat}
+          suiPrice={suiPrice}
+          currencySymbol={currencySymbol}
+        />
+        <button
+          onClick={() => setReviewMode(true)}
+          disabled={!isValid}
+          className="sm:ml-auto px-8 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+        >
+          Review →
+        </button>
+      </div>
     </div>
   );
 }
 
-// Question Card Component
-function QuestionCard({
+// Question Row Component - card style for questions
+function QuestionRow({
   question,
   index,
   isEditing,
@@ -665,138 +967,238 @@ function QuestionCard({
     }
   };
 
+  // Get type label
+  const typeLabel = question.type === 'single_choice'
+    ? 'Single choice'
+    : question.type === 'multiple_choice'
+    ? 'Multiple choice'
+    : 'Text';
+
+  // Type icons as SVG components
+  const SingleChoiceIcon = () => (
+    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="8" cy="8" r="2.5" fill="currentColor" />
+    </svg>
+  );
+
+  const MultipleChoiceIcon = () => (
+    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M4.5 8L7 10.5L11.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+
+  const TextIcon = () => (
+    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M2 4h12M2 8h8M2 12h10" strokeLinecap="round" />
+    </svg>
+  );
+
+  const getTypeIcon = (type: QuestionType) => {
+    switch (type) {
+      case 'single_choice': return <SingleChoiceIcon />;
+      case 'multiple_choice': return <MultipleChoiceIcon />;
+      case 'text_input': return <TextIcon />;
+    }
+  };
+
+  // Expanded edit mode
   if (isEditing) {
     return (
-      <div className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border-2 border-cyan-500">
-        <div className="space-y-4">
-          {/* Question Text */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Question {index + 1}
-            </label>
+      <div className="rounded-xl border-2 border-cyan-500 bg-white dark:bg-white/[0.02] overflow-hidden">
+        <div className="p-4 space-y-4">
+          {/* Question number and text input */}
+          <div className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center bg-gradient-to-br from-cyan-500 to-blue-500 text-white rounded-lg text-sm font-semibold shadow-sm">
+              {index + 1}
+            </span>
             <input
               type="text"
               value={question.text}
               onChange={(e) => onUpdate({ text: e.target.value })}
-              className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition"
+              className="flex-1 px-3 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition text-sm placeholder:text-gray-400"
               placeholder="Enter your question"
               autoFocus
             />
           </div>
 
-          {/* Question Type */}
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Type
-              </label>
-              <select
-                value={question.type}
-                onChange={(e) => onUpdate({ type: e.target.value as QuestionType })}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition"
+          {/* Type selector and Required toggle */}
+          <div className="flex flex-wrap items-center gap-3 ml-10">
+            <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-white/5 rounded-lg">
+              {[
+                { type: 'single_choice' as QuestionType, label: 'Single' },
+                { type: 'multiple_choice' as QuestionType, label: 'Multiple' },
+                { type: 'text_input' as QuestionType, label: 'Text' },
+              ].map((opt) => (
+                <button
+                  key={opt.type}
+                  type="button"
+                  onClick={() => onUpdate({ type: opt.type })}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5 ${
+                    question.type === opt.type
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {getTypeIcon(opt.type)}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <div
+                onClick={() => onUpdate({ required: !question.required })}
+                className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
+                  question.required ? 'bg-cyan-500' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
               >
-                <option value="single_choice">Single choice</option>
-                <option value="multiple_choice">Multiple choice</option>
-                <option value="text_input">Text answer</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 py-3">
-                <input
-                  type="checkbox"
-                  checked={question.required}
-                  onChange={(e) => onUpdate({ required: e.target.checked })}
-                  className="w-4 h-4 text-cyan-500 border-gray-300 rounded focus:ring-cyan-500"
+                <div
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                    question.required ? 'translate-x-4' : 'translate-x-0.5'
+                  }`}
                 />
-                <span className="text-sm text-gray-700 dark:text-gray-300">Required</span>
-              </label>
-            </div>
+              </div>
+              <span className="text-gray-600 dark:text-gray-400">Required</span>
+            </label>
           </div>
 
-          {/* Answers */}
+          {/* Options for choice questions */}
           {question.type !== 'text_input' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Options
-              </label>
-              <div className="space-y-2">
-                {question.answers.map((answer, answerIndex) => (
-                  <div key={answer.id} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={answer.text}
-                      onChange={(e) => updateAnswer(answer.id, e.target.value)}
-                      className="flex-1 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition"
-                      placeholder={`Option ${answerIndex + 1}`}
-                    />
-                    {question.answers.length > 2 && (
-                      <button
-                        onClick={() => removeAnswer(answer.id)}
-                        className="px-3 text-gray-400 hover:text-red-500 transition"
-                      >
-                        ×
-                      </button>
+            <div className="ml-10 space-y-2">
+              {question.answers.map((answer, answerIndex) => (
+                <div key={answer.id} className="flex items-center gap-2 group/option">
+                  <span className="w-5 h-5 flex items-center justify-center text-gray-400">
+                    {question.type === 'single_choice' ? (
+                      <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+                        <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                      </svg>
                     )}
-                  </div>
-                ))}
-                <button
-                  onClick={addAnswer}
-                  className="w-full py-2 text-sm text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 rounded-lg transition"
-                >
-                  + Add option
-                </button>
-              </div>
-
+                  </span>
+                  <input
+                    type="text"
+                    value={answer.text}
+                    onChange={(e) => updateAnswer(answer.id, e.target.value)}
+                    className="flex-1 px-3 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition text-sm placeholder:text-gray-400"
+                    placeholder={`Option ${answerIndex + 1}`}
+                  />
+                  {question.answers.length > 2 && (
+                    <button
+                      onClick={() => removeAnswer(answer.id)}
+                      className="p-1.5 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition opacity-0 group-hover/option:opacity-100"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={addAnswer}
+                className="flex items-center gap-2 ml-7 text-sm text-gray-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add option
+              </button>
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex justify-between pt-2">
-            <button
-              onClick={onDelete}
-              className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
-            >
-              Delete
-            </button>
-            <button
-              onClick={onSave}
-              className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition font-medium"
-            >
-              Done
-            </button>
-          </div>
+          {/* Text input preview */}
+          {question.type === 'text_input' && (
+            <div className="ml-10">
+              <div className="px-3 py-2 bg-gray-50 dark:bg-white/5 border border-dashed border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-400">
+                Respondents will enter text here...
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Actions bar */}
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-white/[0.02] border-t border-gray-100 dark:border-white/5">
+          <button
+            onClick={onDelete}
+            className="text-sm text-gray-400 hover:text-red-500 transition flex items-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
+          <button
+            onClick={onSave}
+            className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:opacity-90 transition text-sm font-medium shadow-sm"
+          >
+            Done
+          </button>
         </div>
       </div>
     );
   }
 
-  // Collapsed view
+  // Collapsed card view
   return (
     <div
       onClick={onEdit}
-      className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-cyan-500/50 transition cursor-pointer"
+      className="group rounded-xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] hover:border-cyan-500/50 transition cursor-pointer overflow-hidden"
     >
-      <div className="flex items-start gap-3">
-        <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 rounded-full text-xs font-medium">
+      <div className="flex items-center gap-3 p-4">
+        {/* Question number */}
+        <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 rounded-lg text-sm font-medium group-hover:bg-gradient-to-br group-hover:from-cyan-500 group-hover:to-blue-500 group-hover:text-white transition">
           {index + 1}
         </span>
+
+        {/* Question content */}
         <div className="flex-1 min-w-0">
-          <p className="text-gray-900 dark:text-white font-medium truncate">
-            {question.text || 'Untitled question'}
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            {question.type === 'single_choice' && `Single choice • ${question.answers.length} options`}
-            {question.type === 'multiple_choice' && `Multiple choice • ${question.answers.length} options`}
-            {question.type === 'text_input' && 'Text answer'}
-            {question.required && ' • Required'}
-          </p>
+          <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+            {question.text || <span className="text-gray-400 italic font-normal">Untitled question</span>}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              {getTypeIcon(question.type)} {typeLabel}
+            </span>
+            {question.required && (
+              <>
+                <span className="text-gray-300 dark:text-gray-600">•</span>
+                <span className="text-xs text-cyan-600 dark:text-cyan-400">Required</span>
+              </>
+            )}
+            {question.type !== 'text_input' && (
+              <>
+                <span className="text-gray-300 dark:text-gray-600">•</span>
+                <span className="text-xs text-gray-400">{question.answers.length} options</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="p-2 text-gray-400 hover:text-red-500 transition rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10"
+            title="Delete"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// Gas Cost Calculator Component
+// Gas Cost Calculator Component - compact inline version
 function GasCostCalculator({
   expectedParticipants,
   setExpectedParticipants,
@@ -811,119 +1213,33 @@ function GasCostCalculator({
   currencySymbol: string;
 }) {
   const participants = parseInt(expectedParticipants) || 0;
-
-  // Calculate costs: 1 campaign creation + N response transactions
-  const campaignTxCount = 1;
-  const responseTxCount = participants;
-  const totalTxCount = campaignTxCount + responseTxCount;
-
+  const totalTxCount = 1 + participants;
   const totalCostFiat = totalTxCount * txCostFiat;
   const costPerTxSui = suiPrice > 0 ? txCostFiat / suiPrice : 0;
   const totalCostSui = totalTxCount * costPerTxSui;
 
   return (
-    <div className="py-4 px-5 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 mb-6">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap hidden sm:inline">Estimated gas cost for</span>
-        <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap sm:hidden">Gas for</span>
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={expectedParticipants}
-          onChange={(e) => {
-            const val = e.target.value.replace(/\D/g, '');
-            setExpectedParticipants(val);
-          }}
-          className="w-16 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition text-center text-sm"
-          placeholder="100"
-        />
-        <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">participants:</span>
-        {participants > 0 ? (
-          <div className="flex flex-col ml-auto text-right">
-            <span className="text-base font-bold bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent whitespace-nowrap">
-              ~{currencySymbol}{totalCostFiat.toFixed(3)}
-            </span>
-            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-              ~{totalCostSui.toFixed(4)} SUI
-            </span>
-          </div>
-        ) : (
-          <span className="text-sm text-gray-400 dark:text-gray-500 ml-auto">—</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Campaign Type Selector Component
-function CampaignTypeSelector({
-  accessMode,
-  onSelect,
-}: {
-  accessMode: CampaignAccessMode;
-  onSelect: (mode: CampaignAccessMode) => void;
-}) {
-  return (
-    <div className="mb-6">
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-        Campaign Type
-      </label>
-      <div className="grid grid-cols-2 gap-4">
-        {/* Open Campaign */}
-        <button
-          type="button"
-          onClick={() => onSelect('open')}
-          className={`p-4 rounded-xl border-2 transition text-left ${
-            accessMode === 'open'
-              ? 'border-cyan-500 bg-cyan-500/5'
-              : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
-          }`}
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <svg className="w-5 h-5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-            <span className={`font-medium ${accessMode === 'open' ? 'text-cyan-600 dark:text-cyan-400' : 'text-gray-900 dark:text-white'}`}>
-              Open
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Anyone with the link can view and participate
-          </p>
-        </button>
-
-        {/* Password Protected */}
-        <button
-          type="button"
-          onClick={() => onSelect('password_protected')}
-          className={`p-4 rounded-xl border-2 transition text-left ${
-            accessMode === 'password_protected'
-              ? 'border-cyan-500 bg-cyan-500/5'
-              : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
-          }`}
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span className={`font-medium ${accessMode === 'password_protected' ? 'text-cyan-600 dark:text-cyan-400' : 'text-gray-900 dark:text-white'}`}>
-              Password Protected
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            End-to-end encrypted, password required
-          </p>
-        </button>
-      </div>
-
-      {accessMode === 'password_protected' && (
-        <p className="mt-3 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2">
-          <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          A password will be generated after deployment. Store it safely — it cannot be recovered.
-        </p>
+    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+      <span className="hidden sm:inline">Gas for</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={expectedParticipants}
+        onChange={(e) => {
+          const val = e.target.value.replace(/\D/g, '');
+          setExpectedParticipants(val);
+          if (val) localStorage.setItem('logbook_expected_participants', val);
+        }}
+        className="w-12 px-1.5 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition text-center text-sm"
+      />
+      <span className="hidden sm:inline">users:</span>
+      {participants > 0 ? (
+        <span className="font-medium text-gray-700 dark:text-gray-300">
+          ~{currencySymbol}{totalCostFiat.toFixed(3)} <span className="text-gray-400">({totalCostSui.toFixed(3)} SUI)</span>
+        </span>
+      ) : (
+        <span>—</span>
       )}
     </div>
   );
@@ -1302,7 +1618,7 @@ const TEST_CAMPAIGNS: TestCampaign[] = [
     { text: 'What improvements are needed?', type: 'multiple_choice', required: false, answers: ['Better lighting', 'Quieter spaces', 'More plants', 'Better AC'] },
     { text: 'Other suggestions?', type: 'text_input', required: false, answers: [] },
   ]},
-  { title: 'Manager Feedback', description: 'Anonymous feedback about your direct manager.', questions: [
+  { title: 'Manager Feedback', description: 'Feedback about your direct manager.', questions: [
     { text: 'Does your manager support you?', type: 'single_choice', required: true, answers: ['Always', 'Usually', 'Sometimes', 'Rarely'] },
     { text: 'What could they improve?', type: 'text_input', required: false, answers: [] },
   ]},
@@ -1630,21 +1946,19 @@ const TEST_CAMPAIGNS: TestCampaign[] = [
 ];
 
 // Test Data Button Component
+// Icon-only test data buttons for header
 function TestDataButton({
   onFill,
+  onClear,
 }: {
   onFill: (data: { title: string; description: string; endDate: string; questions: Question[] }) => void;
+  onClear: () => void;
 }) {
-  const handleClick = () => {
-    // Pick a random template
+  const handleFill = () => {
     const template = TEST_CAMPAIGNS[Math.floor(Math.random() * TEST_CAMPAIGNS.length)];
-
-    // Generate end date 7 days from now
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + 7);
     const endDateStr = endDate.toISOString().split('T')[0];
-
-    // Generate unique IDs for questions and answers
     const now = Date.now();
     const questions: Question[] = template.questions.map((q, qIndex) => ({
       id: `q-${now}-${qIndex}`,
@@ -1656,7 +1970,6 @@ function TestDataButton({
         text: answerText,
       })),
     }));
-
     onFill({
       title: `[Test] ${template.title}`,
       description: template.description,
@@ -1666,15 +1979,30 @@ function TestDataButton({
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="mb-6 w-full py-2.5 rounded-lg border border-dashed border-gray-300 dark:border-white/20 text-gray-500 dark:text-gray-400 hover:border-cyan-500 hover:text-cyan-500 dark:hover:border-cyan-500 dark:hover:text-cyan-400 transition text-sm flex items-center justify-center gap-2"
-    >
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-      </svg>
-      Fill with random test data
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={handleFill}
+        className="flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-cyan-500 hover:bg-gray-100 dark:hover:bg-white/5 transition"
+        title="Fill with test data"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+        <span className="text-[10px] font-medium">Test</span>
+      </button>
+      <button
+        type="button"
+        onClick={onClear}
+        className="flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/5 transition"
+        title="Clear form"
+      >
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20h-10.5l-4.21-4.3a1 1 0 010-1.41l10-10a1 1 0 011.41 0l5 5a1 1 0 010 1.41l-9.2 9.3" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 13.3l-6.3-6.3" />
+        </svg>
+        <span className="text-[10px] font-medium">Clear</span>
+      </button>
+    </>
   );
 }

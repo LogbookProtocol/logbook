@@ -63,8 +63,15 @@ export async function generateEphemeralKeyPair(): Promise<{ nonce: string; maxEp
   const client = new SuiClient({ url: SUI_NETWORK_URL });
 
   // Get current epoch
-  const { epoch } = await client.getLatestSuiSystemState();
-  const maxEpoch = Number(epoch) + 2; // Valid for 2 epochs (~48 hours)
+  let epoch: string;
+  try {
+    const systemState = await client.getLatestSuiSystemState();
+    epoch = systemState.epoch;
+  } catch (error) {
+    console.error('Failed to fetch Sui system state:', error);
+    throw new Error('Unable to connect to Sui network. Please check your internet connection and try again.');
+  }
+  const maxEpoch = Number(epoch) + 10; // Valid for 10 epochs (~10 days on mainnet)
 
   // Generate ephemeral keypair
   const ephemeralKeyPair = new Ed25519Keypair();
@@ -377,8 +384,50 @@ export function isZkLoginSessionValid(): boolean {
     return false;
   }
 
-  // Check if epoch hasn't expired (we don't have current epoch here, so just check existence)
   return true;
+}
+
+/**
+ * Checks the current epoch and returns session status
+ * Returns: { valid: boolean, currentEpoch: number, maxEpoch: number, epochsRemaining: number }
+ */
+export async function checkSessionEpoch(): Promise<{
+  valid: boolean;
+  currentEpoch: number;
+  maxEpoch: number | null;
+  epochsRemaining: number;
+  shouldRefresh: boolean;
+}> {
+  const client = new SuiClient({ url: SUI_NETWORK_URL });
+  const { epoch } = await client.getLatestSuiSystemState();
+  const currentEpoch = Number(epoch);
+  const maxEpoch = getMaxEpoch();
+
+  if (!maxEpoch) {
+    return { valid: false, currentEpoch, maxEpoch: null, epochsRemaining: 0, shouldRefresh: false };
+  }
+
+  const epochsRemaining = maxEpoch - currentEpoch;
+  const valid = epochsRemaining > 0;
+  // Suggest refresh when 3 or fewer epochs remain
+  const shouldRefresh = epochsRemaining <= 3 && epochsRemaining > 0;
+
+  return { valid, currentEpoch, maxEpoch, epochsRemaining, shouldRefresh };
+}
+
+/**
+ * Initiates silent session refresh by redirecting to Google OAuth
+ * This should be called proactively before the session expires
+ */
+export async function refreshZkLoginSession(): Promise<void> {
+  // Store current URL to return after refresh
+  sessionStorage.setItem('zklogin_return_url', window.location.href);
+  sessionStorage.setItem('zklogin_scroll_position', window.scrollY.toString());
+
+  // Start new OAuth flow
+  const { getZkLoginUrl } = await import('./zklogin-utils');
+  const url = await getZkLoginUrl('google');
+  window.location.href = url;
 }
 
 /**

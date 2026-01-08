@@ -42,15 +42,6 @@ export const mockPortfolioCampaigns: PortfolioCampaign[] = [
     createdAt: '2025-01-10',
   },
   {
-    id: 'camp-2',
-    title: 'Team Satisfaction Survey',
-    description: 'Anonymous feedback on team culture and processes',
-    status: 'active',
-    endDate: '2025-01-31',
-    responsesCount: 8,
-    createdAt: '2025-01-05',
-  },
-  {
     id: 'camp-3',
     title: 'Conference Speaker Selection',
     description: 'Vote for speakers at ETH Denver 2025',
@@ -363,41 +354,6 @@ Help us decide where to focus our engineering resources!`,
     ],
     onChain: { objectId: '0x1234567890abcdef...', txHash: '0xabcdef1234567890...', network: 'sui:mainnet' },
   },
-  'camp-2': {
-    id: 'camp-2',
-    title: 'Team Satisfaction Survey',
-    description: `Anonymous feedback on team culture and processes. Help us understand what's working well and what needs improvement.
-
-Your responses are completely anonymous.`,
-    status: 'active',
-    isEncrypted: false,
-    creator: { address: '0x456789abcdef1234567890abcdef1234567890def', name: 'MakerDAO', avatar: null },
-    dates: { created: '2025-01-05T00:00:00Z', endDate: '2025-01-31T23:59:59Z' },
-    stats: { responses: 8 },
-    questions: [
-      {
-        id: 'q1',
-        type: 'single-choice',
-        question: 'How satisfied are you with team communication?',
-        required: true,
-        options: [
-          { id: 'opt1', label: 'Very satisfied' },
-          { id: 'opt2', label: 'Satisfied' },
-          { id: 'opt3', label: 'Neutral' },
-          { id: 'opt4', label: 'Dissatisfied' },
-        ],
-      },
-      {
-        id: 'q2',
-        type: 'text',
-        question: 'What could we improve?',
-        required: false,
-        placeholder: 'Share your suggestions...',
-        maxLength: 1000,
-      },
-    ],
-    onChain: { objectId: '0x2345678901bcdef0...', txHash: '0xbcdef01234567891...', network: 'sui:mainnet' },
-  },
   'camp-3': {
     id: 'camp-3',
     title: 'Conference Speaker Selection',
@@ -689,7 +645,7 @@ export interface QuestionResult {
     votes: number;
     percentage: number;
   }[];
-  winner?: string;
+  winners?: string[]; // Array of option IDs that have the highest votes (can be multiple in case of tie)
   textResponses?: TextResponseWithRespondent[];
 }
 
@@ -719,7 +675,7 @@ export const mockCampaignResults: CampaignResults = {
         { id: 'opt2', label: 'No, keep funds in treasury', votes: 52, percentage: 22.2 },
         { id: 'opt3', label: 'Abstain', votes: 26, percentage: 11.1 },
       ],
-      winner: 'opt1',
+      winners: ['opt1'],
     },
     {
       id: 'q2',
@@ -732,7 +688,7 @@ export const mockCampaignResults: CampaignResults = {
         { id: 'opt3', label: 'Advanced analytics dashboard', votes: 45, percentage: 19.2 },
         { id: 'opt4', label: 'API improvements', votes: 33, percentage: 14.1 },
       ],
-      winner: 'opt1',
+      winners: ['opt1'],
     },
     {
       id: 'q3',

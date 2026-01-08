@@ -39,7 +39,7 @@ function CampaignsContent() {
   const [participatedCampaigns, setParticipatedCampaigns] = useState<ParticipatedCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
+  const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet' | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Decrypted campaign data cache: campaignId -> { title, description }
@@ -290,18 +290,36 @@ function CampaignsContent() {
 
   const stats = getStats();
 
+  // Show loading state until dataSource is determined
+  if (dataSource === null) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-8">
+        <div className="flex justify-between items-center mb-6">
+          <div className="h-8 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="h-10 w-36 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+        </div>
+        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-200 dark:border-white/[0.06]">
+          <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="h-10 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+        </div>
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+              <div className="h-5 w-3/4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2" />
+              <div className="h-4 w-1/2 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-6xl mx-auto px-6 py-12">
+    <div className="max-w-2xl mx-auto px-6 py-8">
 
       {/* Header */}
-      <div className="flex justify-between items-start mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1 mb-2">Campaigns</h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            {activeTab === 'created' && "Campaigns you've created"}
-            {activeTab === 'participated' && "Campaigns you've participated in"}
-          </p>
-        </div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Campaigns</h1>
         <button
           onClick={() => {
             const targetPath = '/campaigns/new';
@@ -316,44 +334,35 @@ function CampaignsContent() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-end justify-between mb-6">
+      {/* Tabs + Stats inline */}
+      <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-white/[0.06]">
         <div className="flex gap-2">
-        <TabButton
-          active={activeTab === 'created'}
-          onClick={() => { setActiveTab('created'); setStatusFilter(null); }}
-          count={createdCount}
-        >
-          Created
-        </TabButton>
-        <TabButton
-          active={activeTab === 'participated'}
-          onClick={() => { setActiveTab('participated'); setStatusFilter(null); }}
-          count={participatingCount}
-        >
-          Participated
-        </TabButton>
+          <TabButton
+            active={activeTab === 'created'}
+            onClick={() => { setActiveTab('created'); setStatusFilter(null); }}
+            count={createdCount}
+          >
+            Created
+          </TabButton>
+          <TabButton
+            active={activeTab === 'participated'}
+            onClick={() => { setActiveTab('participated'); setStatusFilter(null); }}
+            count={participatingCount}
+          >
+            Participated
+          </TabButton>
+        </div>
+        <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+          {activeTab === 'created' && (
+            <>
+              {stats.responses !== undefined && stats.responses > 1 && <span><strong className="text-cyan-600 dark:text-cyan-400">{stats.responses}</strong> responses</span>}
+            </>
+          )}
         </div>
       </div>
 
-      {/* Stats */}
-      {activeTab === 'created' && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <StatCard label="Total" value={stats.total as number} />
-          <StatCard label="Active" value={stats.active as number} color="green" />
-          <StatCard label="Responses" value={stats.responses as number} color="cyan" />
-        </div>
-      )}
-
-      {activeTab === 'participated' && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <StatCard label="Total" value={stats.total as number} />
-          <StatCard label="Still Active" value={stats.active as number} color="green" />
-        </div>
-      )}
-
       {/* Filters */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex flex-wrap gap-2">
           <FilterButton
             active={!statusFilter}
@@ -493,58 +502,7 @@ function FilterButton({
   );
 }
 
-// Stat card component
-function StatCard({
-  label,
-  value,
-  color = 'white',
-}: {
-  label: string;
-  value: number;
-  color?: 'white' | 'green' | 'cyan' | 'orange' | 'gray';
-}) {
-  const colorClasses = {
-    white: 'text-gray-900 dark:text-white',
-    green: 'text-green-600 dark:text-green-400',
-    cyan: 'text-cyan-600 dark:text-cyan-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-    gray: 'text-gray-500 dark:text-gray-400',
-  };
 
-  return (
-    <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-      <div className={`text-2xl font-bold ${colorClasses[color]}`}>{value}</div>
-      <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
-    </div>
-  );
-}
-
-// Campaign type icon component
-function CampaignTypeIcon({ isEncrypted }: { isEncrypted?: boolean }) {
-  if (isEncrypted) {
-    return (
-      <div
-        className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center"
-        title="Password Protected"
-      >
-        <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="flex-shrink-0 w-10 h-10 rounded-full bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center"
-      title="Open Campaign"
-    >
-      <svg className="w-5 h-5 text-cyan-600 dark:text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-    </div>
-  );
-}
 
 // Card for "Created" tab
 function CreatedCard({ campaign, copyLink, isCopied, decrypted }: {
@@ -559,72 +517,67 @@ function CreatedCard({ campaign, copyLink, isCopied, decrypted }: {
   // For encrypted campaigns without decrypted data, show placeholder
   const isEncryptedLocked = campaign.isEncrypted && !decrypted;
   const displayTitle = isEncryptedLocked ? 'Encrypted Campaign' : (decrypted?.title ?? campaign.title);
-  const displayDescription = isEncryptedLocked ? 'Password required to view content' : (decrypted?.description ?? campaign.description);
 
   return (
     <Link
       href={mainLink}
       onClick={() => saveReferrer(mainLink)}
-      className="block p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-cyan-500/50 transition"
+      className="block p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-cyan-500/50 transition"
     >
-      <div className="flex items-start justify-between gap-4">
-        {/* Campaign Type Icon */}
-        <CampaignTypeIcon isEncrypted={campaign.isEncrypted} />
-
+      <div className="flex items-center justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+          <div className="flex items-center gap-2 mb-1">
+            {campaign.isEncrypted ? (
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-cyan-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            )}
+            <span className="text-base font-medium text-gray-900 dark:text-white truncate">
               {displayTitle}
             </span>
-            <span className={`px-2 py-0.5 rounded-full text-xs ${
+            <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ${
               campaign.status === 'active' ? 'bg-green-500/20 text-green-600 dark:text-green-400' :
               'bg-gray-500/20 text-gray-500'
             }`}>
               {statusInfo?.label}
             </span>
           </div>
-
-          <p className="text-sm mb-3 line-clamp-1 text-gray-600 dark:text-gray-400">{displayDescription}</p>
-
-          <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-500">
+          <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+            {campaign.responsesCount !== undefined && campaign.responsesCount > 1 && (
+              <span><strong className="text-gray-900 dark:text-white">{campaign.responsesCount}</strong> responses</span>
+            )}
             {campaign.endDate && (
               <ClientDate
                 dateString={campaign.endDate}
-                prefix={`${campaign.status === 'ended' ? 'Ended' : 'Ends'}: `}
+                prefix={`${campaign.status === 'ended' ? 'Ended ' : 'Ends '}`}
               />
             )}
           </div>
         </div>
 
-        <div className="text-right shrink-0">
-          <div className="text-2xl font-bold text-gray-900 dark:text-white">{campaign.responsesCount || 0}</div>
-          <div className="text-sm text-gray-500 dark:text-gray-500">responses</div>
-          <button
-            onClick={(e) => copyLink(campaign.id, e)}
-            className={`flex items-center gap-1 text-sm mt-2 transition ${
-              isCopied(campaign.id)
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
-            }`}
-            title={isCopied(campaign.id) ? 'Copied!' : 'Copy link'}
-          >
-            {isCopied(campaign.id) ? (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Copied</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
-                <span>Copy link</span>
-              </>
-            )}
-          </button>
-        </div>
+        <button
+          onClick={(e) => copyLink(campaign.id, e)}
+          className={`flex items-center gap-1.5 text-sm transition flex-shrink-0 ${
+            isCopied(campaign.id)
+              ? 'text-green-600 dark:text-green-400'
+              : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+          }`}
+          title={isCopied(campaign.id) ? 'Copied!' : 'Copy link'}
+        >
+          {isCopied(campaign.id) ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          )}
+        </button>
       </div>
     </Link>
   );
@@ -639,91 +592,77 @@ function ParticipatingCard({ campaign, copyLink, isCopied, decrypted }: {
 }) {
   const statusInfo = CAMPAIGN_STATUSES[campaign.status];
   const mainLink = `/campaigns/${campaign.id}`;
-  const resultsLink = `/campaigns/${campaign.id}?tab=results`;
 
   // For encrypted campaigns without decrypted data, show placeholder
   const isEncryptedLocked = campaign.isEncrypted && !decrypted;
   const displayTitle = isEncryptedLocked ? 'Encrypted Campaign' : (decrypted?.title ?? campaign.title);
-  const displayDescription = isEncryptedLocked ? 'Password required to view content' : (decrypted?.description ?? campaign.description);
 
   return (
-    <div className="block p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-cyan-500/50 transition">
-      <div className="flex items-start justify-between gap-4">
-        {/* Campaign Type Icon */}
-        <CampaignTypeIcon isEncrypted={campaign.isEncrypted} />
-
-        <Link
-          href={mainLink}
-          onClick={() => saveReferrer(mainLink)}
-          className="flex-1 min-w-0"
-        >
-          <div className="flex items-center gap-3 mb-2 flex-wrap">
-            <span className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+    <Link
+      href={mainLink}
+      onClick={() => saveReferrer(mainLink)}
+      className="block p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-cyan-500/50 transition"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            {campaign.isEncrypted ? (
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-cyan-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            )}
+            <span className="text-base font-medium text-gray-900 dark:text-white truncate">
               {displayTitle}
             </span>
-            <span className={`px-2 py-0.5 rounded-full text-xs ${
+            <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ${
               campaign.status === 'active' ? 'bg-green-500/20 text-green-600 dark:text-green-400' :
               'bg-gray-500/20 text-gray-500'
             }`}>
               {statusInfo?.label}
             </span>
           </div>
-
-          <p className="text-sm mb-3 line-clamp-1 text-gray-600 dark:text-gray-400">{displayDescription}</p>
-
-          <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-500 flex-wrap">
-            <ClientDate dateString={campaign.respondedAt} prefix="Responded: " />
+          <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+            <ClientDate dateString={campaign.respondedAt} prefix="Responded " />
             {campaign.endDate && (
               <ClientDate
                 dateString={campaign.endDate}
-                prefix={`${campaign.status === 'ended' ? 'Ended' : 'Ends'}: `}
+                prefix={`${campaign.status === 'ended' ? 'Ended ' : 'Ends '}`}
               />
             )}
           </div>
-        </Link>
-
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          <Link
-            href={resultsLink}
-            onClick={() => saveReferrer(resultsLink)}
-            className="text-cyan-600 dark:text-cyan-400 text-sm hover:underline"
-          >
-            View Results →
-          </Link>
-          <button
-            onClick={(e) => copyLink(campaign.id, e)}
-            className={`flex items-center gap-1 text-sm transition ${
-              isCopied(campaign.id)
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
-            }`}
-            title={isCopied(campaign.id) ? 'Copied!' : 'Copy link'}
-          >
-            {isCopied(campaign.id) ? (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Copied</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
-                <span>Copy link</span>
-              </>
-            )}
-          </button>
         </div>
+
+        <button
+          onClick={(e) => copyLink(campaign.id, e)}
+          className={`flex items-center gap-1.5 text-sm transition flex-shrink-0 ${
+            isCopied(campaign.id)
+              ? 'text-green-600 dark:text-green-400'
+              : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+          }`}
+          title={isCopied(campaign.id) ? 'Copied!' : 'Copy link'}
+        >
+          {isCopied(campaign.id) ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          )}
+        </button>
       </div>
-    </div>
+    </Link>
   );
 }
 
 export default function CampaignsPage() {
   return (
-    <Suspense fallback={<div className="max-w-6xl mx-auto px-6 py-12">Loading...</div>}>
+    <Suspense fallback={<div className="max-w-2xl mx-auto px-6 py-8">Loading...</div>}>
       <CampaignsContent />
     </Suspense>
   );

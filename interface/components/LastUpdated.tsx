@@ -31,7 +31,7 @@ export function LastUpdated({ lastUpdated, onRefresh, isLoading }: LastUpdatedPr
   if (!lastUpdated) return null;
 
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+    <div className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
       <span>Updated: {displayTime}</span>
       <button
         onClick={onRefresh}

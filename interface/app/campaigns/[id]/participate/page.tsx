@@ -2,7 +2,7 @@
 
 export const runtime = 'edge';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
@@ -31,9 +31,9 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
   const [rawCampaign, setRawCampaign] = useState<CampaignDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
-  const [currentStep, setCurrentStep] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(5);
   const [zkLoginError, setZkLoginError] = useState<ZkLoginErrorInfo | null>(null);
   const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
   const [backLink, setBackLink] = useState(`/campaigns/${id}`);
@@ -156,8 +156,8 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
   // Loading state
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto px-6 py-12 text-center">
-        <div className="flex justify-center">
+      <div className="max-w-2xl mx-auto px-6 py-8">
+        <div className="flex justify-center py-12">
           <svg className="animate-spin h-8 w-8 text-cyan-500" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -170,11 +170,13 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
   // Handle not found
   if (!campaign && !isLocked) {
     return (
-      <div className="max-w-2xl mx-auto px-6 py-12 text-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Campaign not found</h1>
-        <Link href="/campaigns" className="text-cyan-600 dark:text-cyan-400 hover:underline">
-          ← Back to campaigns
-        </Link>
+      <div className="max-w-2xl mx-auto px-6 py-8">
+        <div className="text-center py-12">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Campaign not found</h1>
+          <Link href="/campaigns" className="text-cyan-600 dark:text-cyan-400 hover:underline">
+            ← Back to campaigns
+          </Link>
+        </div>
       </div>
     );
   }
@@ -232,7 +234,7 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
   // Handle locked encrypted campaign
   if (isLocked && rawCampaign?.isEncrypted) {
     return (
-      <div className="max-w-md mx-auto px-6 py-24">
+      <div className="max-w-md mx-auto px-6 py-8">
         <div className="text-center mb-8">
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
             <svg className="w-10 h-10 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -329,28 +331,26 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
     return null;
   }
 
-  const currentQuestion = campaign.questions[currentStep];
-  const isLastQuestion = currentStep === campaign.questions.length - 1;
-  const progress = ((currentStep + 1) / campaign.questions.length) * 100;
-
-  const canProceed = () => {
-    if (!currentQuestion.required) return true;
-    const answer = answers[currentQuestion.id];
+  // Calculate progress based on answered questions
+  const answeredCount = campaign.questions.filter(q => {
+    const answer = answers[q.id];
     if (!answer) return false;
     if (Array.isArray(answer) && answer.length === 0) return false;
+    if (typeof answer === 'string' && !answer.trim()) return false;
     return true;
-  };
+  }).length;
+  const progress = (answeredCount / campaign.questions.length) * 100;
 
-  const handleNext = () => {
-    if (isLastQuestion) {
-      handleSubmit();
-    } else {
-      setCurrentStep((prev) => prev + 1);
-    }
-  };
-
-  const handleBack = () => {
-    setCurrentStep((prev) => prev - 1);
+  // Check if all required questions are answered
+  const canSubmit = () => {
+    return campaign.questions.every(q => {
+      if (!q.required) return true;
+      const answer = answers[q.id];
+      if (!answer) return false;
+      if (Array.isArray(answer) && answer.length === 0) return false;
+      if (typeof answer === 'string' && !answer.trim()) return false;
+      return true;
+    });
   };
 
   const handleSubmit = async () => {
@@ -360,8 +360,9 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
     console.log('connectedAddress:', connectedAddress);
     console.log('answers:', answers);
 
-    setIsSubmitting(true);
+    setSubmitState('submitting');
     setSubmitError(null);
+    setZkLoginError(null);
 
     const dataSource = getDataSource();
     console.log('dataSource:', dataSource);
@@ -370,7 +371,7 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
     if (dataSource === 'mock') {
       console.log('Submitting answers (mock):', answers);
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      router.push(`/campaigns/${campaign.id}`);
+      setSubmitState('success');
       return;
     }
 
@@ -378,7 +379,7 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
     if (!connectedAddress) {
       console.log('ERROR: No connected address');
       setSubmitError('Please connect your wallet to submit');
-      setIsSubmitting(false);
+      setSubmitState('error');
       return;
     }
 
@@ -387,26 +388,56 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
       // Encrypt answers if campaign is encrypted
       let finalAnswers = answers;
       if (campaign.isEncrypted && campaignPassword) {
-        console.log('Encrypting answers for encrypted campaign');
-        // Convert answers to Record<number, string> format for encryption
-        const textAnswers: Record<number, string> = {};
+        console.log('=== ENCRYPTING ANSWERS ===');
+        console.log('Original answers:', answers);
+
+        // For encrypted campaigns: ALL answers are encrypted (choice and text)
+        // IMPORTANT: Convert choice option IDs to indices BEFORE encryption
+        // so the blockchain receives encrypted indices that decrypt to "0", "1", "2", etc.
+        const answersToEncrypt: Record<number, string> = {};
+
         campaign.questions.forEach((q, idx) => {
           const answer = answers[q.id];
           if (answer !== undefined) {
-            textAnswers[idx] = Array.isArray(answer) ? answer.join(',') : answer;
+            // Convert answer to string for encryption
+            if (Array.isArray(answer)) {
+              // Multiple choice - convert option IDs to indices, then join
+              const indices = answer.map((optId) => {
+                // Convert "opt1" -> "0", "opt2" -> "1", etc.
+                return (parseInt(optId.replace('opt', '')) - 1).toString();
+              });
+              answersToEncrypt[idx] = indices.join(',');
+              console.log(`Question ${idx} (${q.id}, multiple-choice): encrypting indices "${indices.join(',')}" from options [${answer.join(', ')}]`);
+            } else if (q.type === 'single-choice') {
+              // Single choice - convert option ID to index
+              const optionIndex = (parseInt(answer.replace('opt', '')) - 1).toString();
+              answersToEncrypt[idx] = optionIndex;
+              console.log(`Question ${idx} (${q.id}, single-choice): encrypting index "${optionIndex}" from option "${answer}"`);
+            } else {
+              // Text answer - encrypt as-is
+              answersToEncrypt[idx] = answer;
+              console.log(`Question ${idx} (${q.id}, text): encrypting text "${answer}"`);
+            }
           }
         });
 
-        const encryptedTextAnswers = await encryptAnswers(textAnswers, campaignPassword);
+        console.log('answersToEncrypt (with indices):', answersToEncrypt);
+
+        // Encrypt all answers
+        const encryptedAnswers = await encryptAnswers(answersToEncrypt, campaignPassword);
+        console.log('encryptedAnswers:', encryptedAnswers);
 
         // Convert back to Record<string, string | string[]> format
         finalAnswers = {};
         campaign.questions.forEach((q, idx) => {
-          if (encryptedTextAnswers[idx]) {
-            finalAnswers[q.id] = encryptedTextAnswers[idx];
+          if (encryptedAnswers[idx]) {
+            finalAnswers[q.id] = encryptedAnswers[idx];
+            console.log(`Question ${q.id}: mapped encrypted answer from index ${idx}`);
           }
         });
-        console.log('Answers encrypted successfully');
+
+        console.log('finalAnswers after mapping:', finalAnswers);
+        console.log('=== ENCRYPTION COMPLETE ===');
       }
 
       console.log('Building transaction for campaign:', campaign.id);
@@ -415,7 +446,7 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
       if (!tx) {
         console.log('ERROR: Failed to build transaction');
         setSubmitError('Failed to build transaction');
-        setIsSubmitting(false);
+        setSubmitState('error');
         return;
       }
       console.log('Transaction built successfully');
@@ -431,7 +462,7 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
 
         if (!sessionValid) {
           setSubmitError('Your session has expired. Please re-login with Google.');
-          setIsSubmitting(false);
+          setSubmitState('error');
           return;
         }
 
@@ -441,8 +472,7 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
         // Use zkLogin sponsored transaction
         const result = await executeZkLoginSponsoredTransaction(tx, zkLoginAddress);
         console.log('=== zkLogin RESULT ===', result);
-        setIsSubmitting(false);
-        window.location.href = `/campaigns/${campaign.id}`;
+        setSubmitState('success');
       } else {
         // Use regular wallet - direct execution (wallet pays gas)
         signAndExecute(
@@ -450,13 +480,12 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
           {
             onSuccess: (result) => {
               console.log('Response submitted:', result);
-              setIsSubmitting(false);
-              window.location.href = `/campaigns/${campaign.id}`;
+              setSubmitState('success');
             },
             onError: (error) => {
               console.error('Submit failed:', error);
               setSubmitError(error.message || 'Failed to submit response');
-              setIsSubmitting(false);
+              setSubmitState('error');
             },
           }
         );
@@ -478,7 +507,7 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
         setSubmitError(errorMessage || 'Failed to submit response');
         setZkLoginError(null);
       }
-      setIsSubmitting(false);
+      setSubmitState('error');
     }
   };
 
@@ -486,26 +515,124 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
+  // Submitting State
+  if (submitState === 'submitting') {
+    return (
+      <div className="max-w-md mx-auto px-6 py-24 text-center">
+        {/* Animated Loader */}
+        <div className="flex justify-center mb-8">
+          <div className="relative w-20 h-20">
+            <div className="absolute inset-0 rounded-full border-4 border-gray-200 dark:border-white/10" />
+            <div className="absolute inset-0 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg className="w-8 h-8 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Submitting Response
+        </h1>
+        <p className="text-gray-500 dark:text-gray-400 mb-4">
+          {campaign.isEncrypted ? 'Encrypting and submitting' : 'Submitting'} your response...
+        </p>
+        <p className="text-sm text-gray-400 dark:text-gray-500">
+          This may take a few seconds. Please don&apos;t close this page.
+        </p>
+      </div>
+    );
+  }
+
+  // Success State
+  if (submitState === 'success') {
+    return (
+      <SubmitSuccessScreen
+        campaignId={campaign.id}
+        campaignTitle={campaign.title}
+        countdown={countdown}
+        onCountdownTick={() => setCountdown(c => c - 1)}
+        onNavigate={() => router.push(`/campaigns/${campaign.id}`)}
+      />
+    );
+  }
+
+  // Error State
+  if (submitState === 'error') {
+    return (
+      <div className="max-w-md mx-auto px-6 py-24">
+        {/* Error Icon */}
+        <div className="flex justify-center mb-6">
+          <div className="w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <svg className="w-10 h-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+        </div>
+
+        <h1 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-2">
+          Submission Failed
+        </h1>
+        <p className="text-center text-gray-500 dark:text-gray-400 mb-6">
+          There was a problem submitting your response.
+        </p>
+
+        {/* zkLogin Error */}
+        {zkLoginError && (
+          <div className="mb-4">
+            <ZkLoginErrorAlert
+              error={zkLoginError}
+              onDismiss={() => setZkLoginError(null)}
+            />
+          </div>
+        )}
+
+        {/* Regular Error */}
+        {submitError && !zkLoginError && (
+          <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 mb-6">
+            <p className="text-red-600 dark:text-red-400 text-sm font-mono break-all">{submitError}</p>
+          </div>
+        )}
+
+        {/* Try Again Button */}
+        <button
+          onClick={() => {
+            setSubmitState('idle');
+            setSubmitError(null);
+            setZkLoginError(null);
+          }}
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-2xl mx-auto px-6 py-12">
+    <div className="max-w-2xl mx-auto px-6 py-8">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <Link
           href={backLink}
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition mb-4 inline-block"
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition mb-3 inline-flex items-center gap-1"
         >
           ← Back
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent pb-1">{campaign.title}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent">{campaign.title}</h1>
+        {campaign.description && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{campaign.description}</p>
+        )}
       </div>
 
       {/* Progress */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400 mb-2">
           <span>
-            Question {currentStep + 1} of {campaign.questions.length}
+            {answeredCount} of {campaign.questions.length} answered
           </span>
-          <span>{Math.round(progress)}% complete</span>
+          <span>{Math.round(progress)}%</span>
         </div>
         <div className="h-1 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
           <div
@@ -515,138 +642,152 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      {/* Question card */}
-      <div className="p-8 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] mb-8">
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            {currentQuestion.question}
-          </h2>
-          {currentQuestion.description && (
-            <p className="text-gray-600 dark:text-gray-400">{currentQuestion.description}</p>
-          )}
-          {currentQuestion.required && (
-            <span className="text-xs text-orange-600 dark:text-orange-400 mt-2 inline-block">Required</span>
-          )}
-        </div>
-
-        {/* Single choice */}
-        {currentQuestion.type === 'single-choice' && currentQuestion.options && (
-          <div className="space-y-3">
-            {currentQuestion.options.map((option) => (
-              <label
-                key={option.id}
-                className={`flex items-center gap-3 p-4 rounded-lg cursor-pointer transition ${
-                  answers[currentQuestion.id] === option.id
-                    ? 'bg-cyan-500/10 border border-cyan-500/30'
-                    : 'bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/20'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name={currentQuestion.id}
-                  value={option.id}
-                  checked={answers[currentQuestion.id] === option.id}
-                  onChange={() => setAnswer(currentQuestion.id, option.id)}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    answers[currentQuestion.id] === option.id
-                      ? 'border-cyan-500 bg-cyan-500'
-                      : 'border-gray-400 dark:border-gray-500'
-                  }`}
-                >
-                  {answers[currentQuestion.id] === option.id && (
-                    <div className="w-2 h-2 rounded-full bg-white" />
+      {/* All Questions */}
+      <div className="space-y-4 mb-6">
+        {campaign.questions.map((question, index) => (
+          <div
+            key={question.id}
+            className="p-5 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]"
+          >
+            <div className="mb-4">
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 rounded-full text-xs font-medium">
+                  {index + 1}
+                </span>
+                <div className="flex-1">
+                  <h2 className="text-base font-medium text-gray-900 dark:text-white">
+                    {question.question}
+                    {question.required && (
+                      <span className="text-orange-500 ml-1">*</span>
+                    )}
+                  </h2>
+                  {question.description && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{question.description}</p>
                   )}
                 </div>
-                <span
-                  className={
-                    answers[currentQuestion.id] === option.id
-                      ? 'text-gray-900 dark:text-white'
-                      : 'text-gray-700 dark:text-gray-300'
-                  }
-                >
-                  {option.label}
-                </span>
-              </label>
-            ))}
-          </div>
-        )}
-
-        {/* Multiple choice */}
-        {currentQuestion.type === 'multiple-choice' && currentQuestion.options && (
-          <div className="space-y-3">
-            {currentQuestion.options.map((option) => {
-              const currentAnswers = answers[currentQuestion.id];
-              const selected = Array.isArray(currentAnswers) && currentAnswers.includes(option.id);
-              return (
-                <label
-                  key={option.id}
-                  className={`flex items-center gap-3 p-4 rounded-lg cursor-pointer transition ${
-                    selected
-                      ? 'bg-cyan-500/10 border border-cyan-500/30'
-                      : 'bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/20'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    value={option.id}
-                    checked={selected}
-                    onChange={(e) => {
-                      const current = Array.isArray(answers[currentQuestion.id])
-                        ? (answers[currentQuestion.id] as string[])
-                        : [];
-                      if (e.target.checked) {
-                        setAnswer(currentQuestion.id, [...current, option.id]);
-                      } else {
-                        setAnswer(
-                          currentQuestion.id,
-                          current.filter((id: string) => id !== option.id)
-                        );
-                      }
-                    }}
-                    className="sr-only"
-                  />
-                  <div
-                    className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                      selected ? 'border-cyan-500 bg-cyan-500' : 'border-gray-400 dark:border-gray-500'
-                    }`}
-                  >
-                    {selected && <span className="text-white text-xs">✓</span>}
-                  </div>
-                  <span className={selected ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}>
-                    {option.label}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Text answer */}
-        {currentQuestion.type === 'text' && (() => {
-          const maxLength = currentQuestion.maxLength || 500;
-          const currentLength = ((answers[currentQuestion.id] as string) || '').length;
-          const remaining = maxLength - currentLength;
-          return (
-            <div>
-              <textarea
-                rows={4}
-                placeholder={currentQuestion.placeholder || 'Enter your answer...'}
-                maxLength={maxLength}
-                value={(answers[currentQuestion.id] as string) || ''}
-                onChange={(e) => setAnswer(currentQuestion.id, e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] text-gray-900 dark:text-white placeholder-gray-500 focus:border-cyan-500/50 focus:outline-none transition resize-none"
-              />
-              <div className="flex justify-end mt-2">
-                <span className={`text-xs ${remaining < 50 ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500'}`}>
-                  {remaining} characters remaining
-                </span>
               </div>
             </div>
-          );
-        })()}
+
+            {/* Single choice */}
+            {question.type === 'single-choice' && question.options && (
+              <div className="space-y-2 ml-9">
+                {question.options.map((option) => (
+                  <label
+                    key={option.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                      answers[question.id] === option.id
+                        ? 'bg-cyan-500/10 border border-cyan-500/30'
+                        : 'bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/20'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={question.id}
+                      value={option.id}
+                      checked={answers[question.id] === option.id}
+                      onChange={() => setAnswer(question.id, option.id)}
+                      className="sr-only"
+                    />
+                    <div
+                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                        answers[question.id] === option.id
+                          ? 'border-cyan-500 bg-cyan-500'
+                          : 'border-gray-400 dark:border-gray-500'
+                      }`}
+                    >
+                      {answers[question.id] === option.id && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                      )}
+                    </div>
+                    <span
+                      className={`text-sm ${
+                        answers[question.id] === option.id
+                          ? 'text-gray-900 dark:text-white'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      {option.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* Multiple choice */}
+            {question.type === 'multiple-choice' && question.options && (
+              <div className="space-y-2 ml-9">
+                {question.options.map((option) => {
+                  const currentAnswers = answers[question.id];
+                  const selected = Array.isArray(currentAnswers) && currentAnswers.includes(option.id);
+                  return (
+                    <label
+                      key={option.id}
+                      className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                        selected
+                          ? 'bg-cyan-500/10 border border-cyan-500/30'
+                          : 'bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/20'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        value={option.id}
+                        checked={selected}
+                        onChange={(e) => {
+                          const current = Array.isArray(answers[question.id])
+                            ? (answers[question.id] as string[])
+                            : [];
+                          if (e.target.checked) {
+                            setAnswer(question.id, [...current, option.id]);
+                          } else {
+                            setAnswer(
+                              question.id,
+                              current.filter((id: string) => id !== option.id)
+                            );
+                          }
+                        }}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                          selected ? 'border-cyan-500 bg-cyan-500' : 'border-gray-400 dark:border-gray-500'
+                        }`}
+                      >
+                        {selected && <span className="text-white text-[10px]">✓</span>}
+                      </div>
+                      <span className={`text-sm ${selected ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {option.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Text answer */}
+            {question.type === 'text' && (() => {
+              const maxLength = question.maxLength || 500;
+              const currentLength = ((answers[question.id] as string) || '').length;
+              const remaining = maxLength - currentLength;
+              return (
+                <div className="ml-9">
+                  <textarea
+                    rows={3}
+                    placeholder={question.placeholder || 'Enter your answer...'}
+                    maxLength={maxLength}
+                    value={(answers[question.id] as string) || ''}
+                    onChange={(e) => setAnswer(question.id, e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] text-gray-900 dark:text-white placeholder-gray-500 focus:border-cyan-500/50 focus:outline-none transition resize-none text-sm"
+                  />
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-xs ${remaining < 50 ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500'}`}>
+                      {remaining} characters remaining
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        ))}
       </div>
 
       {/* zkLogin Error with relogin button */}
@@ -659,29 +800,90 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
 
       {/* Regular error message */}
       {submitError && !zkLoginError && (
-        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 mb-6">
+        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 mb-4">
           <p className="text-red-600 dark:text-red-400 text-sm">{submitError}</p>
         </div>
       )}
 
-      {/* Navigation */}
-      <div className="flex justify-between">
+      {/* Submit Button */}
+      <div className="flex justify-end">
         <button
-          onClick={handleBack}
-          disabled={currentStep === 0}
-          className="px-6 py-3 rounded-lg border border-gray-300 dark:border-white/10 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handleSubmit}
+          disabled={!canSubmit()}
+          className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Back
-        </button>
-
-        <button
-          onClick={handleNext}
-          disabled={!canProceed() || isSubmitting}
-          className="px-6 py-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? 'Submitting...' : isLastQuestion ? 'Submit' : 'Next'}
+          Submit
         </button>
       </div>
+    </div>
+  );
+}
+
+// Submit Success Screen Component
+function SubmitSuccessScreen({
+  campaignId,
+  campaignTitle,
+  countdown,
+  onCountdownTick,
+  onNavigate,
+}: {
+  campaignId: string;
+  campaignTitle: string;
+  countdown: number;
+  onCountdownTick: () => void;
+  onNavigate: () => void;
+}) {
+  const hasNavigated = useRef(false);
+
+  // Auto-redirect countdown
+  useEffect(() => {
+    if (countdown <= 0) {
+      if (!hasNavigated.current) {
+        hasNavigated.current = true;
+        onNavigate();
+      }
+      return;
+    }
+
+    const timer = setTimeout(onCountdownTick, 1000);
+    return () => clearTimeout(timer);
+  }, [countdown, onCountdownTick, onNavigate]);
+
+  return (
+    <div className="max-w-md mx-auto px-6 py-24 text-center">
+      {/* Success Icon */}
+      <div className="flex justify-center mb-6">
+        <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+          <svg className="w-10 h-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      </div>
+
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        Response Submitted!
+      </h1>
+      <p className="text-gray-500 dark:text-gray-400 mb-6">
+        Your response to &ldquo;{campaignTitle}&rdquo; has been recorded on the blockchain.
+      </p>
+
+      {/* Countdown */}
+      <div className="mb-6">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+          <svg className="w-5 h-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm font-medium">Redirecting in {countdown}s...</span>
+        </div>
+      </div>
+
+      {/* Skip Button */}
+      <button
+        onClick={onNavigate}
+        className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition text-sm"
+      >
+        Go to campaign now →
+      </button>
     </div>
   );
 }

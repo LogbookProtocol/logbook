@@ -150,13 +150,13 @@ function AccountContent() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-12">
+    <div className="max-w-2xl mx-auto px-6 py-8">
 
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         {/* Row 1: Title + Disconnect button */}
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-3xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent">Account</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Account</h1>
           <button
             onClick={handleDisconnect}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition"
@@ -226,7 +226,7 @@ function AccountContent() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-end justify-between mb-8 border-b border-gray-200 dark:border-white/[0.06]">
+      <div className="flex items-end justify-between mb-6 border-b border-gray-200 dark:border-white/[0.06]">
         <div className="flex gap-2">
           {[
             { id: 'overview', label: 'Overview' },
@@ -236,7 +236,7 @@ function AccountContent() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as TabType)}
-              className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+              className={`px-4 py-2.5 font-medium transition border-b-2 -mb-px text-sm ${
                 activeTab === tab.id
                   ? 'text-gray-900 dark:text-white border-cyan-500'
                   : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-white'
@@ -266,6 +266,7 @@ function AccountContent() {
           sponsorshipStatus={sponsorshipStatus}
           isMock={isMock}
           isLoading={isLoading}
+          connectedAddress={connectedAddress}
         />
       )}
       {activeTab === 'settings' && (
@@ -350,75 +351,102 @@ function OverviewTab({
   const balanceInFiat = suiPrice ? (parseFloat(suiBalance) * suiPrice).toFixed(2) : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
 
       {/* Assets */}
       {!isMock && (
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Assets</h2>
-            <div className="flex items-center gap-3">
-              <LastUpdated
-                lastUpdated={lastUpdated}
-                onRefresh={onRefresh}
-                isLoading={isRefreshing}
-              />
-              {faucetMessage && (
-                <span className={`text-sm ${faucetMessage.type === 'success' ? 'text-green-500' : 'text-red-500'}`}>
-                  {faucetMessage.text}
-                </span>
-              )}
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Assets</h2>
+            <LastUpdated
+              lastUpdated={lastUpdated}
+              onRefresh={onRefresh}
+              isLoading={isRefreshing}
+            />
+          </div>
+          <div className="space-y-3">
+            <div className="rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                    <th className="text-left text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Asset</th>
+                    <th className="text-right text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Balance</th>
+                    <th className="text-right text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center">
+                          <svg className="w-4 h-5" viewBox="0 0 29 36" fill="currentColor">
+                            <path className="text-cyan-500" fillRule="evenodd" clipRule="evenodd" d="M22.5363 15.0142L22.5357 15.0158C24.0044 16.8574 24.8821 19.1898 24.8821 21.7268C24.8821 24.3014 23.9781 26.6655 22.4698 28.5196L22.3399 28.6792L22.3055 28.4763C22.2762 28.3038 22.2418 28.1296 22.2018 27.954C21.447 24.6374 18.9876 21.7934 14.9397 19.4907C12.2063 17.9399 10.6417 16.0727 10.2309 13.9511C9.96558 12.5792 10.1628 11.2012 10.544 10.0209C10.9251 8.84103 11.4919 7.85247 11.9735 7.2573L11.9738 7.25692L13.5484 5.3315C13.8246 4.99384 14.3413 4.99384 14.6175 5.3315L22.5363 15.0142ZM25.0269 13.0906L25.0272 13.0898L14.4731 0.184802C14.2715 -0.0616007 13.8943 -0.0616009 13.6928 0.184802L3.1385 13.09L3.13878 13.0907L3.10444 13.1333C1.16226 15.5434 0 18.6061 0 21.9402C0 29.7051 6.30498 36 14.0829 36C21.8608 36 28.1658 29.7051 28.1658 21.9402C28.1658 18.6062 27.0035 15.5434 25.0614 13.1333L25.0269 13.0906ZM5.66381 14.9727L5.66423 14.9721L6.60825 13.8178L6.63678 14.0309C6.65938 14.1997 6.68678 14.3694 6.71928 14.5398C7.33009 17.7446 9.51208 20.4169 13.1602 22.4865C16.3312 24.2912 18.1775 26.3666 18.7095 28.6427C18.9314 29.5926 18.971 30.5272 18.8749 31.3443L18.8689 31.3948L18.8232 31.4172C17.3919 32.1164 15.783 32.5088 14.0826 32.5088C8.11832 32.5088 3.28308 27.6817 3.28308 21.7268C3.28308 19.1701 4.17443 16.8208 5.66381 14.9727Z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-white">SUI</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Sui</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <span className="font-medium text-gray-900 dark:text-white">{suiBalance}</span>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {balanceInFiat ? `${currencySymbol}${balanceInFiat}` : '—'}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end">
               <button
                 onClick={handleFaucet}
                 disabled={isFaucetLoading || !connectedAddress}
-                className="px-3 py-1.5 rounded-lg text-sm bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition-colors ${
+                  faucetMessage?.type === 'success'
+                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                    : faucetMessage?.type === 'error'
+                    ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                    : 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
-                {isFaucetLoading ? 'Requesting...' : 'Get test SUI'}
+                {isFaucetLoading ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Requesting...</span>
+                  </>
+                ) : faucetMessage?.type === 'success' ? (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Received!</span>
+                  </>
+                ) : faucetMessage?.type === 'error' ? (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>Failed</span>
+                  </>
+                ) : (
+                  'Get test SUI'
+                )}
               </button>
             </div>
-          </div>
-          <div className="rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-white/[0.06]">
-                  <th className="text-left text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Asset</th>
-                  <th className="text-right text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Balance</th>
-                  <th className="text-right text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3">Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center">
-                        <svg className="w-4 h-5" viewBox="0 0 29 36" fill="currentColor">
-                          <path className="text-cyan-500" fillRule="evenodd" clipRule="evenodd" d="M22.5363 15.0142L22.5357 15.0158C24.0044 16.8574 24.8821 19.1898 24.8821 21.7268C24.8821 24.3014 23.9781 26.6655 22.4698 28.5196L22.3399 28.6792L22.3055 28.4763C22.2762 28.3038 22.2418 28.1296 22.2018 27.954C21.447 24.6374 18.9876 21.7934 14.9397 19.4907C12.2063 17.9399 10.6417 16.0727 10.2309 13.9511C9.96558 12.5792 10.1628 11.2012 10.544 10.0209C10.9251 8.84103 11.4919 7.85247 11.9735 7.2573L11.9738 7.25692L13.5484 5.3315C13.8246 4.99384 14.3413 4.99384 14.6175 5.3315L22.5363 15.0142ZM25.0269 13.0906L25.0272 13.0898L14.4731 0.184802C14.2715 -0.0616007 13.8943 -0.0616009 13.6928 0.184802L3.1385 13.09L3.13878 13.0907L3.10444 13.1333C1.16226 15.5434 0 18.6061 0 21.9402C0 29.7051 6.30498 36 14.0829 36C21.8608 36 28.1658 29.7051 28.1658 21.9402C28.1658 18.6062 27.0035 15.5434 25.0614 13.1333L25.0269 13.0906ZM5.66381 14.9727L5.66423 14.9721L6.60825 13.8178L6.63678 14.0309C6.65938 14.1997 6.68678 14.3694 6.71928 14.5398C7.33009 17.7446 9.51208 20.4169 13.1602 22.4865C16.3312 24.2912 18.1775 26.3666 18.7095 28.6427C18.9314 29.5926 18.971 30.5272 18.8749 31.3443L18.8689 31.3948L18.8232 31.4172C17.3919 32.1164 15.783 32.5088 14.0826 32.5088C8.11832 32.5088 3.28308 27.6817 3.28308 21.7268C3.28308 19.1701 4.17443 16.8208 5.66381 14.9727Z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-900 dark:text-white">SUI</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Sui</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 text-right">
-                    <span className="font-medium text-gray-900 dark:text-white">{suiBalance}</span>
-                  </td>
-                  <td className="px-4 py-4 text-right">
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {balanceInFiat ? `${currencySymbol}${balanceInFiat}` : '—'}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </section>
       )}
 
       {/* Campaign Activity */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Campaign Activity</h2>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Campaign Activity</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <StatCard
             value={stats.campaignsCreated}
@@ -444,7 +472,7 @@ function OverviewTab({
       {/* Recent transactions - only for mock data */}
       {isMock && (
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Transactions</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Recent Transactions</h2>
           <div className="space-y-2">
             {mockTransactionHistory.map(tx => (
               <TransactionRow key={tx.id} tx={tx} />
@@ -456,40 +484,25 @@ function OverviewTab({
       {/* Transactions Section - for blockchain data */}
       {!isMock && (
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Transactions <span className="font-normal text-gray-500 dark:text-gray-400">(Logbook Smart Contract)</span></h2>
-
-          {/* Gas Statistics */}
-          {transactions.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-              <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+          <div className="mb-4 flex items-start justify-between">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+              Transactions<br />
+              <span className="font-normal text-sm text-gray-500 dark:text-gray-400">Logbook Smart Contract</span>
+            </h2>
+            {transactions.length > 0 && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 text-right">
+                Total Gas Used: <span className="font-medium text-gray-900 dark:text-white">
                   {totalGasFiat ? `${currencySymbol}${totalGasFiat}` : `${totalGasSpent.toFixed(4)} SUI`}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Total Gas Used
-                  {totalGasFiat && <span className="text-gray-400"> ({totalGasSpent.toFixed(4)} SUI)</span>}
-                </div>
+                </span>
+                {totalGasFiat && (
+                  <>
+                    <br />
+                    <span className="text-gray-400">({totalGasSpent.toFixed(4)} SUI)</span>
+                  </>
+                )}
               </div>
-              <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                  {userPaidFiat ? `${currencySymbol}${userPaidFiat}` : `${userPaidGas.toFixed(4)} SUI`}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  You Paid
-                  {userPaidFiat && <span className="text-gray-400"> ({userPaidGas.toFixed(4)} SUI)</span>}
-                </div>
-              </div>
-              <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-                <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
-                  {logbookPaidFiat ? `${currencySymbol}${logbookPaidFiat}` : `${logbookPaidGas.toFixed(4)} SUI`}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Logbook Sponsored
-                  {logbookPaidFiat && <span className="text-gray-400"> ({logbookPaidGas.toFixed(4)} SUI)</span>}
-                </div>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {isLoadingTxs ? (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -527,6 +540,7 @@ function StatCard({
 }) {
   return (
     <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+      <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">{label}</div>
       <div className={`text-2xl font-bold ${color}`}>
         {isLoading ? (
           <span className="inline-block w-12 h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
@@ -534,7 +548,6 @@ function StatCard({
           value
         )}
       </div>
-      <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
     </div>
   );
 }
@@ -661,11 +674,39 @@ function FreeTierTab({
   sponsorshipStatus,
   isMock,
   isLoading,
+  connectedAddress,
 }: {
   sponsorshipStatus: SponsorshipStatus | null;
   isMock: boolean;
   isLoading: boolean;
+  connectedAddress?: string | null;
 }) {
+  const [transactions, setTransactions] = useState<UserTransaction[]>([]);
+  const [isLoadingTxs, setIsLoadingTxs] = useState(true);
+  const [suiPrice, setSuiPrice] = useState<number | null>(null);
+  const { currency, currencySymbol } = useCurrency();
+
+  useEffect(() => {
+    fetchSuiPrice(currency).then(price => setSuiPrice(price)).catch(() => {});
+  }, [currency]);
+
+  // Fetch transactions
+  useEffect(() => {
+    if (!connectedAddress || isMock) {
+      setIsLoadingTxs(false);
+      return;
+    }
+
+    setIsLoadingTxs(true);
+    fetchUserTransactions(connectedAddress)
+      .then(txs => setTransactions(txs))
+      .finally(() => setIsLoadingTxs(false));
+  }, [connectedAddress, isMock]);
+
+  // Calculate logbook paid gas
+  const logbookPaidGas = transactions.filter(tx => tx.gasPayedBy === 'logbook').reduce((sum, tx) => sum + tx.gasCost, 0);
+  const logbookPaidFiat = suiPrice ? (logbookPaidGas * suiPrice).toFixed(2) : null;
+
   if (isMock) {
     return (
       <div className="text-center py-12 text-gray-500 dark:text-gray-400">
@@ -697,38 +738,50 @@ function FreeTierTab({
   const remainingResponses = Math.max(0, sponsorshipStatus.limits.MAX_RESPONSES - usedResponses);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Logbook Sponsored Balance */}
+      {!isLoadingTxs && transactions.length > 0 && (
+        <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+            {logbookPaidFiat ? `${currencySymbol}${logbookPaidFiat}` : `${logbookPaidGas.toFixed(4)} SUI`}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Logbook Sponsored{logbookPaidFiat && <span className="text-gray-400"> ({logbookPaidGas.toFixed(4)} SUI)</span>}
+          </div>
+        </div>
+      )}
+
       {/* Overview cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Free Campaigns Left</div>
           <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
             {remainingCampaigns}
           </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">Free Campaigns Left</div>
         </div>
         <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Free Responses Left</div>
           <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
             {remainingResponses}
           </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">Free Responses Left</div>
         </div>
         <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Campaigns Used</div>
           <div className="text-2xl font-bold text-gray-900 dark:text-white">
             {usedCampaigns}
           </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">Campaigns Used</div>
         </div>
         <div className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Responses Used</div>
           <div className="text-2xl font-bold text-gray-900 dark:text-white">
             {usedResponses}
           </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">Responses Used</div>
         </div>
       </div>
 
       {/* Progress bars */}
-      <section className="p-6 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
-        <h2 className="text-lg font-semibold text-cyan-600 dark:text-cyan-400 mb-4">Usage Progress</h2>
+      <section className="p-4 rounded-lg bg-cyan-500/5 dark:bg-cyan-500/10 border border-cyan-500/20">
+        <h2 className="text-sm font-semibold text-cyan-600 dark:text-cyan-400 mb-4">Usage Progress</h2>
         <div className="space-y-6">
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -762,8 +815,8 @@ function FreeTierTab({
       </section>
 
       {/* Info */}
-      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">About Free Tier</h2>
+      <section className="p-4 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">About Free Tier</h2>
         <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
           <p>
             Logbook sponsors gas fees for campaign creators to help them get started without needing SUI tokens. Each creator gets <span className="font-medium text-gray-900 dark:text-white">{sponsorshipStatus.limits.MAX_CAMPAIGNS} free campaigns</span> and <span className="font-medium text-gray-900 dark:text-white">{sponsorshipStatus.limits.MAX_RESPONSES} free responses</span> to their campaigns. Participants never pay — gas fees for responses are covered by the campaign creator. After using your free tier, you&apos;ll need SUI tokens to pay for transaction gas fees.
@@ -824,6 +877,13 @@ function SettingsTab() {
     }
   };
 
+  // Common button styles for all settings options
+  const getOptionButtonClass = (isActive: boolean) => `px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+    isActive
+      ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/20'
+      : 'bg-gray-50 dark:bg-white/[0.02] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04]'
+  }`;
+
   // Languages split into verified (human-checked) and AI generated (machine translations)
   const [languageGroups] = useState(() => {
     // Fisher-Yates shuffle helper
@@ -868,21 +928,17 @@ function SettingsTab() {
   });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
 
       {/* Theme */}
-      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Theme</h2>
+      <section>
+        <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Theme</h2>
         <div className="flex flex-wrap gap-2">
           {(['auto', 'light', 'dark'] as const).map(mode => (
             <button
               key={mode}
               onClick={() => setThemeMode(mode)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                themeMode === mode
-                  ? 'bg-gray-200 dark:bg-white/15 text-gray-900 dark:text-white'
-                  : 'bg-transparent text-gray-500 dark:text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+              className={getOptionButtonClass(themeMode === mode)}
             >
               {getThemeLabel(mode)}
             </button>
@@ -891,89 +947,37 @@ function SettingsTab() {
       </section>
 
       {/* Language */}
-      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Language</h2>
-        <div className="space-y-4">
-          {/* Auto option */}
-          <div>
+      <section>
+        <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Language</h2>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setLanguage(languageGroups.auto.code)}
+            className={getOptionButtonClass(languageSetting === languageGroups.auto.code)}
+          >
+            {t(`language.${languageGroups.auto.key}`)}
+          </button>
+          {languageGroups.verified.map(lang => (
             <button
-              onClick={() => setLanguage(languageGroups.auto.code)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                languageSetting === languageGroups.auto.code
-                  ? 'bg-gray-200 dark:bg-white/15 text-gray-900 dark:text-white'
-                  : 'bg-transparent text-gray-500 dark:text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+              key={lang.code}
+              onClick={() => setLanguage(lang.code)}
+              className={getOptionButtonClass(languageSetting === lang.code)}
             >
-              {t(`language.${languageGroups.auto.key}`)}
+              {t(`language.${lang.key}`)}
             </button>
-          </div>
+          ))}
 
-          {/* Verified languages */}
-          <div className="p-4 rounded-lg bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-            <div className="flex items-center gap-2 mb-3">
-              <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Verified</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {languageGroups.verified.map(lang => (
-                <button
-                  key={lang.code}
-                  onClick={() => setLanguage(lang.code)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                    languageSetting === lang.code
-                      ? 'bg-gray-200 dark:bg-white/15 text-gray-900 dark:text-white'
-                      : 'bg-white dark:bg-white/5 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  {t(`language.${lang.key}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* AI Generated languages - temporarily hidden
-          <div className="p-4 rounded-lg bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-            <div className="flex items-center gap-2 mb-3">
-              <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">AI Generated</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {languageGroups.aiGenerated.map(lang => (
-                <button
-                  key={lang.code}
-                  onClick={() => setLanguage(lang.code)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                    languageSetting === lang.code
-                      ? 'bg-gray-200 dark:bg-white/15 text-gray-900 dark:text-white'
-                      : 'bg-white dark:bg-white/5 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  {t(`language.${lang.key}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-          */}
         </div>
       </section>
 
       {/* Currency */}
-      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Currency</h2>
+      <section>
+        <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Currency</h2>
         <div className="flex flex-wrap gap-2">
           {(['auto', 'usd', 'eur'] as const).map(currency => (
             <button
               key={currency}
               onClick={() => setCurrency(currency)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                currencySetting === currency
-                  ? 'bg-gray-200 dark:bg-white/15 text-gray-900 dark:text-white'
-                  : 'bg-transparent text-gray-500 dark:text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+              className={getOptionButtonClass(currencySetting === currency)}
             >
               {getCurrencyButtonLabel(currency)}
             </button>
@@ -982,42 +986,42 @@ function SettingsTab() {
       </section>
 
       {/* Date Format */}
-      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Date Format</h2>
+      <section>
+        <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Date Format</h2>
         <div className="flex flex-wrap gap-2">
           {dateFormatOptions.map(option => (
             <button
               key={option.value}
               onClick={() => handleDateFormatChange(option.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                dateFormat === option.value
-                  ? 'bg-gray-200 dark:bg-white/15 text-gray-900 dark:text-white'
-                  : 'bg-transparent text-gray-500 dark:text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+              className={getOptionButtonClass(dateFormat === option.value)}
             >
               <span>{option.label}</span>
-              <span className={`ml-2 text-sm ${dateFormat === option.value ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600'}`}>({option.example})</span>
+              <span className={`ml-1.5 text-xs ${
+                dateFormat === option.value
+                  ? 'text-cyan-600/70 dark:text-cyan-400/70'
+                  : 'text-gray-500 dark:text-gray-400'
+              }`}>({option.example})</span>
             </button>
           ))}
         </div>
       </section>
 
       {/* Time Format */}
-      <section className="p-6 rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06]">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Time Format</h2>
+      <section>
+        <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Time Format</h2>
         <div className="flex flex-wrap gap-2">
           {timeFormatOptions.map(option => (
             <button
               key={option.value}
               onClick={() => handleTimeFormatChange(option.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                timeFormat === option.value
-                  ? 'bg-gray-200 dark:bg-white/15 text-gray-900 dark:text-white'
-                  : 'bg-transparent text-gray-500 dark:text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+              className={getOptionButtonClass(timeFormat === option.value)}
             >
               <span>{option.label}</span>
-              <span className={`ml-2 text-sm ${timeFormat === option.value ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600'}`}>({option.example})</span>
+              <span className={`ml-1.5 text-xs ${
+                timeFormat === option.value
+                  ? 'text-cyan-600/70 dark:text-cyan-400/70'
+                  : 'text-gray-500 dark:text-gray-400'
+              }`}>({option.example})</span>
             </button>
           ))}
         </div>
@@ -1115,7 +1119,7 @@ function TransactionRow({ tx }: { tx: Transaction }) {
 
 export default function AccountPage() {
   return (
-    <Suspense fallback={<div className="max-w-6xl mx-auto px-6 py-12">Loading...</div>}>
+    <Suspense fallback={<div className="max-w-2xl mx-auto px-6 py-8">Loading...</div>}>
       <AccountContent />
     </Suspense>
   );

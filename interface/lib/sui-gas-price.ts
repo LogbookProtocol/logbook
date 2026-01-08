@@ -115,14 +115,26 @@ export async function fetchSuiPriceWithMeta(currency: Currency = 'usd', forceRef
   }
 
   try {
+    // Use AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=${currency}`
+      `https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=${currency}`,
+      { signal: controller.signal }
     );
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data = await response.json();
-    const price = data.sui[currency];
+    const price = data.sui?.[currency];
+
+    if (typeof price !== 'number') {
+      throw new Error('Invalid price data');
+    }
+
     const now = Date.now();
 
     // Cache the result
@@ -133,7 +145,10 @@ export async function fetchSuiPriceWithMeta(currency: Currency = 'usd', forceRef
 
     return { price, timestamp: new Date(now), isFallback: false };
   } catch (error) {
-    console.error('Failed to fetch SUI price:', error);
+    // Only log non-abort errors in development
+    if (process.env.NODE_ENV === 'development' && !(error instanceof DOMException && error.name === 'AbortError')) {
+      console.warn('SUI price fetch failed, using fallback:', error instanceof Error ? error.message : 'Unknown error');
+    }
     // Return fallback price
     const fallbackPrice = currency === 'eur' ? FALLBACK_SUI_PRICE_EUR : FALLBACK_SUI_PRICE_USD;
     return { price: fallbackPrice, timestamp: null, isFallback: true };
