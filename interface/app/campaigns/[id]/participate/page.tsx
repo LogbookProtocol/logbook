@@ -20,6 +20,10 @@ import {
   storePassword,
   isValidPassword,
 } from '@/lib/crypto';
+import {
+  getPersonalKey,
+  encryptPasswordForStorage,
+} from '@/lib/encryption-auto-recovery';
 
 export default function CampaignParticipatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -440,8 +444,27 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
         console.log('=== ENCRYPTION COMPLETE ===');
       }
 
+      // Generate response_seed for encrypted campaigns (enables participant auto-recovery)
+      let responseSeed: string | null = null;
+      if (campaign.isEncrypted && campaignPassword) {
+        try {
+          console.log('=== GENERATING RESPONSE_SEED ===');
+          // Get personal key (works for both Google and Wallet)
+          const personalKey = await getPersonalKey();
+
+          // Encrypt password with personal key
+          responseSeed = await encryptPasswordForStorage(campaignPassword, personalKey);
+          console.log('response_seed generated successfully (encrypted password for auto-recovery)');
+          console.log('=== RESPONSE_SEED GENERATION COMPLETE ===');
+        } catch (error) {
+          console.error('Failed to generate response_seed:', error);
+          console.log('Continuing without response_seed (participant will need to enter password again)');
+          // Continue without response_seed - not critical for submission
+        }
+      }
+
       console.log('Building transaction for campaign:', campaign.id);
-      const tx = buildSubmitResponseTx(campaign.id, finalAnswers);
+      const tx = buildSubmitResponseTx(campaign.id, finalAnswers, responseSeed);
 
       if (!tx) {
         console.log('ERROR: Failed to build transaction');

@@ -16,7 +16,7 @@ import {
 } from '@/lib/mock-data';
 import { formatDate, formatDateTime, formatEndDateTimeParts } from '@/lib/format-date';
 import { getDataSource, getSuiscanObjectUrl, getSuiscanTxUrl, getSuiscanAccountUrl } from '@/lib/sui-config';
-import { fetchCampaignById, fetchCampaignResults, fetchCampaignResponses, checkUserParticipation, CampaignResponseData } from '@/lib/sui-service';
+import { fetchCampaignById, fetchCampaignResults, fetchCampaignResponses, checkUserParticipation, getUserResponse, CampaignResponseData } from '@/lib/sui-service';
 import { useAuth } from '@/contexts/AuthContext';
 import { getReferrer, saveReferrer } from '@/lib/navigation';
 import { useCopyLink } from '@/hooks/useCopyLink';
@@ -203,8 +203,24 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
       }
 
       // Priority 4: Participant auto-recovery (response_seed + personal_key)
-      // TODO: Implement after we add response fetching by user address
-      // This would require fetching the user's response and extracting response_seed
+      if (!passwordToTry && connectedAddress) {
+        try {
+          // Fetch user's response to get response_seed
+          const userResponse = await getUserResponse(id, connectedAddress);
+
+          if (userResponse?.responseSeed) {
+            console.log('[Auto-Recovery] Found response_seed, attempting participant auto-unlock');
+            const participantPassword = await tryParticipantAutoUnlock(userResponse.responseSeed);
+
+            if (participantPassword) {
+              console.log('[Auto-Recovery] Participant auto-unlock successful');
+              passwordToTry = participantPassword;
+            }
+          }
+        } catch (error) {
+          console.error('[Auto-Recovery] Participant auto-unlock failed:', error);
+        }
+      }
 
       // No password found through any method
       if (!passwordToTry) {

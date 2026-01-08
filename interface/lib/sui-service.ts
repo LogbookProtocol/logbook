@@ -602,6 +602,51 @@ export async function fetchCampaignResponses(campaignId: string): Promise<Campai
   }
 }
 
+/**
+ * Get user's response for a specific campaign (for participant auto-recovery)
+ * Returns the response with response_seed if the user has participated
+ */
+export async function getUserResponse(
+  campaignId: string,
+  userAddress: string
+): Promise<{ responseSeed: string | null } | null> {
+  const client = createSuiClient();
+  if (!client) return null;
+
+  try {
+    const campaign = await client.getObject({
+      id: campaignId,
+      options: { showContent: true },
+    });
+
+    if (!campaign.data?.content || campaign.data.content.dataType !== 'moveObject') {
+      return null;
+    }
+
+    const content = campaign.data.content as unknown as { fields: BlockchainCampaign };
+    const data = content.fields;
+
+    // Find user's response
+    const userResponse = data.responses.find(
+      (r) => r.fields.respondent === userAddress
+    );
+
+    if (!userResponse) {
+      return null; // User hasn't participated yet
+    }
+
+    // Extract response_seed (Option<String> in Move, comes as string[] or null)
+    const responseSeed = userResponse.fields.response_seed && userResponse.fields.response_seed.length > 0
+      ? userResponse.fields.response_seed[0]
+      : null;
+
+    return { responseSeed };
+  } catch (error) {
+    console.error('Error fetching user response:', error);
+    return null;
+  }
+}
+
 // Build transaction for creating a campaign
 export function buildCreateCampaignTx(
   title: string,
