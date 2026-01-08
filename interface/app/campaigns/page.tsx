@@ -20,7 +20,12 @@ import { fetchCampaignsByCreator, fetchParticipatedCampaigns, ParticipatedCampai
 import { useAuth } from '@/contexts/AuthContext';
 import { saveReferrer } from '@/lib/navigation';
 import { LastUpdated } from '@/components/LastUpdated';
-import { getStoredPassword, decryptData } from '@/lib/crypto';
+import { getStoredPassword, decryptData, storePassword } from '@/lib/crypto';
+import {
+  tryCreatorAutoUnlock,
+  tryParticipantAutoUnlock,
+} from '@/lib/encryption-auto-recovery';
+import { getUserResponse } from '@/lib/sui-service';
 
 type TabType = 'created' | 'participated';
 
@@ -144,9 +149,11 @@ function CampaignsContent() {
     }
   }, [connectedAddress, fetchData]);
 
-  // Try to decrypt encrypted campaigns when we have stored passwords
+  // Try to decrypt encrypted campaigns using auto-recovery
   useEffect(() => {
     const decryptEncryptedCampaigns = async () => {
+      if (!connectedAddress) return;
+
       // Combine all encrypted campaigns from both lists
       const allCampaigns = [
         ...blockchainCampaigns.filter(c => c.isEncrypted),
@@ -161,17 +168,56 @@ function CampaignsContent() {
         // Skip if already decrypted
         if (decryptedCache[campaign.id]) continue;
 
-        const password = getStoredPassword(campaign.id, connectedAddress);
-        if (!password) continue;
+        let password: string | null = null;
 
-        try {
-          const [title, description] = await Promise.all([
-            decryptData(campaign.title, password),
-            decryptData(campaign.description, password),
-          ]);
-          newDecrypted[campaign.id] = { title, description };
-        } catch {
-          // Decryption failed - password might be wrong, ignore
+        // Priority 1: Check localStorage
+        password = getStoredPassword(campaign.id, connectedAddress);
+
+        // Priority 2: Try creator auto-unlock (if user is creator)
+        if (!password && campaign.campaignSeed && campaign.creator?.address === connectedAddress) {
+          try {
+            password = await tryCreatorAutoUnlock(
+              campaign.campaignSeed,
+              campaign.creator.address,
+              connectedAddress
+            );
+            if (password) {
+              console.log(`[Auto-Recovery] Creator auto-unlock successful for campaign ${campaign.id}`);
+            }
+          } catch (error) {
+            console.error(`[Auto-Recovery] Creator auto-unlock failed for campaign ${campaign.id}:`, error);
+          }
+        }
+
+        // Priority 3: Try participant auto-unlock (if user participated)
+        if (!password) {
+          try {
+            const userResponse = await getUserResponse(campaign.id, connectedAddress);
+            if (userResponse?.responseSeed) {
+              password = await tryParticipantAutoUnlock(userResponse.responseSeed);
+              if (password) {
+                console.log(`[Auto-Recovery] Participant auto-unlock successful for campaign ${campaign.id}`);
+              }
+            }
+          } catch (error) {
+            console.error(`[Auto-Recovery] Participant auto-unlock failed for campaign ${campaign.id}:`, error);
+          }
+        }
+
+        // If we have a password, try to decrypt
+        if (password) {
+          try {
+            const [title, description] = await Promise.all([
+              decryptData(campaign.title, password),
+              decryptData(campaign.description, password),
+            ]);
+            newDecrypted[campaign.id] = { title, description };
+
+            // Store password for future use
+            storePassword(campaign.id, password, connectedAddress);
+          } catch (error) {
+            console.error(`[Auto-Recovery] Decryption failed for campaign ${campaign.id}:`, error);
+          }
         }
       }
 
