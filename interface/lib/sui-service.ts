@@ -635,10 +635,18 @@ export async function getUserResponse(
       return null; // User hasn't participated yet
     }
 
-    // Extract response_seed (Option<String> in Move, comes as string[] or null)
-    const responseSeed = userResponse.fields.response_seed && userResponse.fields.response_seed.length > 0
-      ? userResponse.fields.response_seed[0]
-      : null;
+    // Extract response_seed (Option<String> in Move)
+    // After fixing to use tx.pure.option(), it comes as a string directly (not an array)
+    let responseSeed: string | null = null;
+    if (userResponse.fields.response_seed) {
+      if (typeof userResponse.fields.response_seed === 'string') {
+        // New format: string directly
+        responseSeed = userResponse.fields.response_seed;
+      } else if (Array.isArray(userResponse.fields.response_seed) && userResponse.fields.response_seed.length > 0) {
+        // Old format: array with one element (for backwards compatibility)
+        responseSeed = userResponse.fields.response_seed[0];
+      }
+    }
 
     return { responseSeed };
   } catch (error) {
@@ -762,11 +770,11 @@ export function buildSubmitResponseTx(
   }
 
   // Prepare response_seed as Option<String> for Move contract
-  // If responseSeed is null, pass empty array for Option::None
-  // If responseSeed exists, pass array with single element for Option::Some
+  // Option in Move is represented as: None = empty vector, Some(value) = vector with one element
+  // But we need to use the correct Option type encoding for BCS
   const responseSeedArg = responseSeed
-    ? tx.pure.vector('string', [responseSeed])
-    : tx.pure.vector('string', []);
+    ? tx.pure.option('string', responseSeed)
+    : tx.pure.option('string', null);
 
   tx.moveCall({
     target: `${config.packageId}::logbook::submit_response`,

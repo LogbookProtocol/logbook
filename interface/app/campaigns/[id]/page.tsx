@@ -185,7 +185,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
       // Priority 1: URL parameter (manual sharing)
       const keyParam = searchParams.get('key');
       if (keyParam && isValidPassword(keyParam)) {
-        console.log('[Auto-Recovery] Using password from URL parameter');
+        console.log('[Auto-Recovery] Using password from URL parameter:', keyParam.substring(0, 16) + '...');
         passwordToTry = keyParam;
       }
 
@@ -193,21 +193,24 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
       if (!passwordToTry) {
         const storedPassword = getStoredPassword(id, connectedAddress);
         if (storedPassword && isValidPassword(storedPassword)) {
-          console.log('[Auto-Recovery] Using password from localStorage');
+          console.log('[Auto-Recovery] Using password from localStorage:', storedPassword.substring(0, 16) + '...');
           passwordToTry = storedPassword;
         }
       }
 
       // Priority 3: Creator auto-recovery (campaign_seed + creator_key)
       if (!passwordToTry && blockchainCampaign.campaignSeed && connectedAddress) {
+        console.log('[Auto-Recovery] Trying creator auto-unlock with seed:', blockchainCampaign.campaignSeed);
         const creatorPassword = await tryCreatorAutoUnlock(
           blockchainCampaign.campaignSeed,
           blockchainCampaign.creator.address,
           connectedAddress
         );
         if (creatorPassword) {
-          console.log('[Auto-Recovery] Creator auto-unlock successful');
+          console.log('[Auto-Recovery] Creator auto-unlock successful, password:', creatorPassword.substring(0, 16) + '...');
           passwordToTry = creatorPassword;
+        } else {
+          console.log('[Auto-Recovery] Creator auto-unlock returned null');
         }
       }
 
@@ -222,9 +225,13 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
             const participantPassword = await tryParticipantAutoUnlock(userResponse.responseSeed);
 
             if (participantPassword) {
-              console.log('[Auto-Recovery] Participant auto-unlock successful');
+              console.log('[Auto-Recovery] Participant auto-unlock successful, password:', participantPassword.substring(0, 16) + '...');
               passwordToTry = participantPassword;
+            } else {
+              console.log('[Auto-Recovery] Participant auto-unlock returned null');
             }
+          } else {
+            console.log('[Auto-Recovery] No response_seed found for this user');
           }
         } catch (error) {
           console.error('[Auto-Recovery] Participant auto-unlock failed:', error);
@@ -247,6 +254,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
       if (!passwordToTry) return;
 
       // We have a password, try to decrypt
+      console.log('[Auto-Recovery] Attempting to decrypt with recovered password');
       try {
         const decryptedData = await decryptCampaignData(
           {
@@ -278,8 +286,12 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
         setDecryptedCampaign(decrypted);
         setIsLocked(false);
         storePassword(id, passwordToTry, connectedAddress);
+        console.log('[Auto-Recovery] Decryption successful!');
       } catch (error) {
-        console.error('[Auto-Recovery] Decryption failed:', error);
+        console.error('[Auto-Recovery] Decryption failed with recovered password:', error);
+        console.log('[Auto-Recovery] Password that failed:', passwordToTry?.substring(0, 16) + '...');
+        // Don't store failed password, remove it if it was in localStorage
+        removeStoredPassword(id, connectedAddress);
         setIsLocked(true);
       } finally {
         setIsAutoDecrypting(false);

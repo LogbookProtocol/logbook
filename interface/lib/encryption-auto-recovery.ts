@@ -95,7 +95,6 @@ export async function getPersonalKey(
   const googleSub = getGoogleSub();
   if (googleSub) {
     const hashedKey = CryptoJS.SHA256(googleSub).toString();
-    console.log('[Auto-Recovery] Using hashed Google sub as personal key');
     return hashedKey;
   }
 
@@ -105,7 +104,6 @@ export async function getPersonalKey(
       const message = 'key_derivation_v1';
       const signature = await signMessage(message);
       const hashedKey = CryptoJS.SHA256(signature).toString();
-      console.log('[Auto-Recovery] Using hashed wallet signature as personal key');
       return hashedKey;
     } catch (error) {
       console.error('[Auto-Recovery] Failed to get wallet signature:', error);

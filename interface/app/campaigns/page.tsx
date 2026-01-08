@@ -20,7 +20,7 @@ import { fetchCampaignsByCreator, fetchParticipatedCampaigns, ParticipatedCampai
 import { useAuth } from '@/contexts/AuthContext';
 import { saveReferrer } from '@/lib/navigation';
 import { LastUpdated } from '@/components/LastUpdated';
-import { getStoredPassword, decryptData, storePassword } from '@/lib/crypto';
+import { getStoredPassword, decryptData, storePassword, removeStoredPassword } from '@/lib/crypto';
 import {
   tryCreatorAutoUnlock,
   tryParticipantAutoUnlock,
@@ -195,9 +195,6 @@ function CampaignsContent() {
             const userResponse = await getUserResponse(campaign.id, connectedAddress);
             if (userResponse?.responseSeed) {
               password = await tryParticipantAutoUnlock(userResponse.responseSeed);
-              if (password) {
-                console.log(`[Auto-Recovery] Participant auto-unlock successful for campaign ${campaign.id}`);
-              }
             }
           } catch (error) {
             console.error(`[Auto-Recovery] Participant auto-unlock failed for campaign ${campaign.id}:`, error);
@@ -216,7 +213,10 @@ function CampaignsContent() {
             // Store password for future use
             storePassword(campaign.id, password, connectedAddress);
           } catch (error) {
-            console.error(`[Auto-Recovery] Decryption failed for campaign ${campaign.id}:`, error);
+            console.error(`[Auto-Recovery] Decryption failed for campaign ${campaign.id.substring(0, 8)}...:`, error);
+            console.log(`[Auto-Recovery] Failed password: ${password.substring(0, 16)}...`);
+            // Remove failed password from storage
+            removeStoredPassword(campaign.id, connectedAddress);
           }
         }
       }
