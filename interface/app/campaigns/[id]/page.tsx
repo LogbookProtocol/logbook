@@ -29,6 +29,10 @@ import {
   removeStoredPassword,
   isValidPassword,
 } from '@/lib/crypto';
+import {
+  tryCreatorAutoUnlock,
+  tryParticipantAutoUnlock,
+} from '@/lib/encryption-auto-recovery';
 
 
 function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
@@ -154,7 +158,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     }
   }, [fetchData]);
 
-  // Handle encrypted campaign decryption
+  // Handle encrypted campaign decryption with auto-recovery
   useEffect(() => {
     if (!blockchainCampaign?.isEncrypted) {
       setIsLocked(false);
@@ -163,40 +167,61 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
       return;
     }
 
-    // Check if we have a password to try
-    const keyParam = searchParams.get('key');
-    const storedPassword = getStoredPassword(id, connectedAddress);
-
-    // Debug: List all localStorage keys related to campaign passwords
-    if (typeof window !== 'undefined') {
-      const allCampaignPasswords = Object.keys(localStorage)
-        .filter(key => key.startsWith('campaign_password_'))
-        .map(key => ({ key, hasValue: !!localStorage.getItem(key) }));
-      console.log('[Decrypt Debug] All campaign passwords in localStorage:', allCampaignPasswords);
-    }
-
-    console.log('[Decrypt Debug]', {
-      campaignId: id,
-      connectedAddress,
-      keyParam,
-      storedPassword: storedPassword ? '***found***' : 'not found',
-      isValidPassword: storedPassword ? isValidPassword(storedPassword) : false,
-    });
-    const passwordToTry = (keyParam && isValidPassword(keyParam)) ? keyParam :
-                          (storedPassword && isValidPassword(storedPassword)) ? storedPassword : null;
-
-    // No password found, show locked state immediately
-    if (!passwordToTry) {
-      console.log('[Decrypt Debug] No password to try, showing locked state');
-      setIsLocked(true);
-      setIsAutoDecrypting(false);
-      return;
-    }
-
-    // We have a password, start auto-decryption
+    // Start auto-decryption attempts
     setIsAutoDecrypting(true);
 
-    const tryDecrypt = async (password: string) => {
+    const attemptAutoUnlock = async () => {
+      let passwordToTry: string | null = null;
+
+      // Priority 1: URL parameter (manual sharing)
+      const keyParam = searchParams.get('key');
+      if (keyParam && isValidPassword(keyParam)) {
+        console.log('[Auto-Recovery] Using password from URL parameter');
+        passwordToTry = keyParam;
+      }
+
+      // Priority 2: LocalStorage (existing sessions)
+      if (!passwordToTry) {
+        const storedPassword = getStoredPassword(id, connectedAddress);
+        if (storedPassword && isValidPassword(storedPassword)) {
+          console.log('[Auto-Recovery] Using password from localStorage');
+          passwordToTry = storedPassword;
+        }
+      }
+
+      // Priority 3: Creator auto-recovery (campaign_seed + creator_key)
+      if (!passwordToTry && blockchainCampaign.campaignSeed && connectedAddress) {
+        const creatorPassword = await tryCreatorAutoUnlock(
+          blockchainCampaign.campaignSeed,
+          blockchainCampaign.creator.address,
+          connectedAddress
+        );
+        if (creatorPassword) {
+          console.log('[Auto-Recovery] Creator auto-unlock successful');
+          passwordToTry = creatorPassword;
+        }
+      }
+
+      // Priority 4: Participant auto-recovery (response_seed + personal_key)
+      // TODO: Implement after we add response fetching by user address
+      // This would require fetching the user's response and extracting response_seed
+
+      // No password found through any method
+      if (!passwordToTry) {
+        console.log('[Auto-Recovery] No password available, showing locked state');
+        setIsLocked(true);
+        setIsAutoDecrypting(false);
+        return;
+      }
+
+      // We have a password, try to decrypt
+      return passwordToTry;
+    };
+
+    attemptAutoUnlock().then(async (passwordToTry) => {
+      if (!passwordToTry) return;
+
+      // We have a password, try to decrypt
       try {
         const decryptedData = await decryptCampaignData(
           {
@@ -207,7 +232,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
               options: q.options?.map(o => o.label) || [],
             })),
           },
-          password
+          passwordToTry
         );
 
         // Create decrypted campaign object
@@ -227,15 +252,14 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
 
         setDecryptedCampaign(decrypted);
         setIsLocked(false);
-        storePassword(id, password, connectedAddress);
-      } catch {
+        storePassword(id, passwordToTry, connectedAddress);
+      } catch (error) {
+        console.error('[Auto-Recovery] Decryption failed:', error);
         setIsLocked(true);
       } finally {
         setIsAutoDecrypting(false);
       }
-    };
-
-    tryDecrypt(passwordToTry);
+    });
   }, [blockchainCampaign, id, searchParams, connectedAddress]);
 
   // Handle unlock button click
