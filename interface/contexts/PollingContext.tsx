@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type PollingInterval = 5 | 30 | 60;
+export type PollingInterval = 0 | 5 | 30 | 60;
 
 interface PollingContextType {
   pollingInterval: PollingInterval;
@@ -22,7 +22,7 @@ export function PollingProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = parseInt(stored, 10);
-      if (parsed === 5 || parsed === 30 || parsed === 60) {
+      if (parsed === 0 || parsed === 5 || parsed === 30 || parsed === 60) {
         setPollingIntervalState(parsed);
       }
     }

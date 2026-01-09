@@ -118,9 +118,10 @@ function AccountContent() {
     fetchData(true);
 
     // Poll based on user's selected interval (in seconds)
-    const interval = setInterval(() => fetchData(false), pollingInterval * 1000);
-
-    return () => clearInterval(interval);
+    if (pollingInterval > 0) {
+      const interval = setInterval(() => fetchData(false), pollingInterval * 1000);
+      return () => clearInterval(interval);
+    }
   }, [connectedAddress, isMock, fetchData, pollingInterval]);
 
   // Generate short address

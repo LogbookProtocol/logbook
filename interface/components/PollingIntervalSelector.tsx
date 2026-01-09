@@ -9,6 +9,7 @@ export function PollingIntervalSelector() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const intervals: { value: PollingInterval; label: string }[] = [
+    { value: 0, label: 'Off' },
     { value: 5, label: '5s' },
     { value: 30, label: '30s' },
     { value: 60, label: '60s' },
@@ -33,7 +34,7 @@ export function PollingIntervalSelector() {
     setIsOpen(false);
   };
 
-  const currentLabel = intervals.find(i => i.value === pollingInterval)?.label || '5s';
+  const currentLabel = intervals.find(i => i.value === pollingInterval)?.label || 'Off';
 
   return (
     <div className="relative" ref={menuRef}>

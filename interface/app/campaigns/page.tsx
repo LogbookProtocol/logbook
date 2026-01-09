@@ -163,9 +163,10 @@ function CampaignsContent() {
       fetchData(true);
 
       // Poll based on user's selected interval (in seconds)
-      const interval = setInterval(() => fetchData(false), pollingInterval * 1000);
-
-      return () => clearInterval(interval);
+      if (pollingInterval > 0) {
+        const interval = setInterval(() => fetchData(false), pollingInterval * 1000);
+        return () => clearInterval(interval);
+      }
     }
   }, [connectedAddress, fetchData, pollingInterval]);
 
@@ -1020,7 +1021,7 @@ function CreatedRow({ campaign, copyLink, isCopied, decrypted }: {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
             )}
-            <span className="text-sm font-medium text-gray-900 dark:text-white break-words">
+            <span className="text-sm text-gray-900 dark:text-white break-words">
               {displayTitle}
             </span>
           </div>
@@ -1071,7 +1072,7 @@ function CreatedRow({ campaign, copyLink, isCopied, decrypted }: {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
             )}
-            <span className="text-sm font-medium text-gray-900 dark:text-white">
+            <span className="text-sm text-gray-900 dark:text-white">
               {displayTitle}
             </span>
           </div>
@@ -1151,7 +1152,7 @@ function ParticipatingRow({ campaign, copyLink, isCopied, decrypted }: {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
             )}
-            <span className="text-sm font-medium text-gray-900 dark:text-white break-words">
+            <span className="text-sm text-gray-900 dark:text-white break-words">
               {displayTitle}
             </span>
           </div>
@@ -1202,7 +1203,7 @@ function ParticipatingRow({ campaign, copyLink, isCopied, decrypted }: {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
             )}
-            <span className="text-sm font-medium text-gray-900 dark:text-white">
+            <span className="text-sm text-gray-900 dark:text-white">
               {displayTitle}
             </span>
           </div>
