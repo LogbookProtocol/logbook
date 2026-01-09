@@ -67,7 +67,6 @@ export default function NewCampaignPage() {
   // Deploy flow state: 'idle' | 'deploying' | 'success' | 'error'
   const [deployState, setDeployState] = useState<'idle' | 'deploying' | 'success' | 'error'>('idle');
   const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null);
-  const [passwordCopied, setPasswordCopied] = useState(false);
   const [simulateError, setSimulateError] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const [errorCopied, setErrorCopied] = useState(false);
@@ -198,8 +197,12 @@ export default function NewCampaignPage() {
 
           const creatorKey = await getCreatorKey(campaignSeed, signMessageWrapper);
 
+          if (!creatorKey) {
+            throw new Error('Failed to get creator key');
+          }
+
           // Generate deterministic password from seed and creator key
-          password = generatePasswordFromSeed(campaignSeed, creatorKey);
+          password = generatePasswordFromSeed(campaignSeed, creatorKey as string);
           setGeneratedPassword(password);
 
           console.log('[Campaign Creation] Using deterministic password for auto-recovery');
@@ -540,37 +543,9 @@ export default function NewCampaignPage() {
   if (deployState === 'success') {
     return (
       <DeploySuccessScreen
-        isEncrypted={formData.accessMode === 'password_protected'}
-        password={generatedPassword}
-        campaignId={createdCampaignId}
         campaignTitle={formData.title}
-        passwordCopied={passwordCopied}
         countdown={countdown}
         onCountdownTick={() => setCountdown(c => c - 1)}
-        onCopyPassword={() => {
-          if (generatedPassword) {
-            navigator.clipboard.writeText(generatedPassword);
-            setPasswordCopied(true);
-            setTimeout(() => setPasswordCopied(false), 2000);
-          }
-        }}
-        onDownloadPassword={() => {
-          if (generatedPassword) {
-            const content = generatePasswordFileContent(
-              generatedPassword,
-              formData.title,
-              createdCampaignId || 'unknown',
-              new Date()
-            );
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `logbook-campaign-password-${createdCampaignId?.slice(0, 8) || 'new'}.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }
-        }}
         onNavigate={() => {
           resetForm();
           if (createdCampaignId) {
@@ -627,26 +602,36 @@ export default function NewCampaignPage() {
                 </tr>
               )}
 
-              {/* Access Type row */}
+              {/* Privacy Type row */}
               <tr className="border-b border-gray-200 dark:border-white/[0.06]">
                 <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
-                  Access Type
+                  Privacy Type
                 </td>
                 <td className="px-4 py-2.5">
                   {formData.accessMode === 'password_protected' ? (
-                    <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                      Password Protected
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        Private
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        (Password-protected with end-to-end encryption)
+                      </span>
+                    </div>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-green-600 dark:text-green-400">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                      </svg>
-                      Open
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="inline-flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                        </svg>
+                        Public
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        (Anyone can view and participate)
+                      </span>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -733,7 +718,7 @@ export default function NewCampaignPage() {
             onClick={() => setReviewMode(false)}
             className="flex-1 py-3 rounded-xl border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition font-medium"
           >
-            Edit
+            Back
           </button>
           <button
             onClick={handleDeploy}
@@ -776,13 +761,13 @@ export default function NewCampaignPage() {
         </div>
       </div>
 
-      {/* Campaign Type Selector */}
+      {/* Privacy Type Selector */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Campaign Type
+          Privacy Type
         </label>
         <div className="grid grid-cols-2 gap-3">
-          {/* Open Campaign */}
+          {/* Public Campaign */}
           <button
             type="button"
             onClick={() => setAccessMode('open')}
@@ -797,21 +782,21 @@ export default function NewCampaignPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
               <span className={`font-medium ${formData.accessMode === 'open' ? 'text-cyan-600 dark:text-cyan-400' : 'text-gray-900 dark:text-white'}`}>
-                Open
+                Public
               </span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Anyone with the link can view and participate
+              Anyone can view and participate
             </p>
           </button>
 
-          {/* Password Protected */}
+          {/* Private */}
           <button
             type="button"
             onClick={() => setAccessMode('password_protected')}
             className={`p-4 rounded-xl border-2 transition text-left ${
               formData.accessMode === 'password_protected'
-                ? 'border-cyan-500 bg-cyan-500/5'
+                ? 'border-amber-500 bg-amber-500/5'
                 : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
             }`}
           >
@@ -819,12 +804,12 @@ export default function NewCampaignPage() {
               <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
-              <span className={`font-medium ${formData.accessMode === 'password_protected' ? 'text-cyan-600 dark:text-cyan-400' : 'text-gray-900 dark:text-white'}`}>
-                Password Protected
+              <span className={`font-medium ${formData.accessMode === 'password_protected' ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>
+                Private
               </span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              End-to-end encrypted, password required
+              Password-protected with end-to-end encryption
             </p>
           </button>
         </div>
@@ -1413,34 +1398,20 @@ function DeployErrorScreen({
 
 // Deploy Success Screen Component
 function DeploySuccessScreen({
-  isEncrypted,
-  password,
-  campaignId,
   campaignTitle,
-  passwordCopied,
   countdown,
   onCountdownTick,
-  onCopyPassword,
-  onDownloadPassword,
   onNavigate,
 }: {
-  isEncrypted: boolean;
-  password: string | null;
-  campaignId: string | null;
   campaignTitle: string;
-  passwordCopied: boolean;
   countdown: number;
   onCountdownTick: () => void;
-  onCopyPassword: () => void;
-  onDownloadPassword: () => void;
   onNavigate: () => void;
 }) {
   const hasNavigated = useRef(false);
 
-  // Auto-redirect countdown for open campaigns
+  // Auto-redirect countdown
   useEffect(() => {
-    if (isEncrypted) return; // Don't auto-redirect for encrypted campaigns
-
     if (countdown <= 0) {
       if (!hasNavigated.current) {
         hasNavigated.current = true;
@@ -1451,88 +1422,8 @@ function DeploySuccessScreen({
 
     const timer = setTimeout(onCountdownTick, 1000);
     return () => clearTimeout(timer);
-  }, [isEncrypted, countdown, onCountdownTick, onNavigate]);
+  }, [countdown, onCountdownTick, onNavigate]);
 
-  // For encrypted campaigns - show password screen
-  if (isEncrypted && password) {
-    return (
-      <div className="max-w-md mx-auto px-6 py-24">
-        {/* Success Icon */}
-        <div className="flex justify-center mb-6">
-          <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-            <svg className="w-10 h-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        </div>
-
-        <h1 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-2">
-          Campaign Created!
-        </h1>
-        <p className="text-center text-gray-500 dark:text-gray-400 mb-6">
-          Your password-protected campaign has been deployed. Save this password — you&apos;ll need it to access the campaign.
-        </p>
-
-        {/* Password Display */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Campaign Password
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              readOnly
-              value={password}
-              className="w-full px-4 py-3 pr-24 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 font-mono text-sm"
-            />
-            <button
-              onClick={onCopyPassword}
-              className={`absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
-                passwordCopied
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                  : 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-200 dark:hover:bg-cyan-900/50'
-              }`}
-            >
-              {passwordCopied ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
-        </div>
-
-        {/* Download Button */}
-        <button
-          onClick={onDownloadPassword}
-          className="w-full py-3 mb-4 rounded-xl border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition font-medium flex items-center justify-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-          Download Password File
-        </button>
-
-        {/* Warning */}
-        <div className="mb-6 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-          <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
-            <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span>
-              <strong>Important:</strong> This password cannot be recovered if lost. Without it, the campaign data will be permanently inaccessible.
-            </span>
-          </p>
-        </div>
-
-        {/* Continue Button */}
-        <button
-          onClick={onNavigate}
-          className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition"
-        >
-          Go to Campaign
-        </button>
-      </div>
-    );
-  }
-
-  // For open campaigns - show countdown
   return (
     <div className="max-w-md mx-auto px-6 py-24 text-center">
       {/* Success Icon */}
