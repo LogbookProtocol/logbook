@@ -29,6 +29,7 @@ import { fetchSuiPrice } from '@/lib/sui-gas-price';
 import { useAuth } from '@/contexts/AuthContext';
 import { Currency } from '@/contexts/CurrencyContext';
 import { LastUpdated } from '@/components/LastUpdated';
+import { usePollingInterval } from '@/contexts/PollingContext';
 
 type TabType = 'overview' | 'free-tier' | 'settings';
 
@@ -40,9 +41,16 @@ function AccountContent() {
   const account = useCurrentAccount();
   const { currentWallet } = useCurrentWallet();
   const { logout } = useAuth();
+  const { pollingInterval } = usePollingInterval();
 
   // Data source and blockchain state
-  const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>('mock');
+  const [dataSource, setDataSourceState] = useState<'mock' | 'devnet' | 'testnet' | 'mainnet'>(() => {
+    // Initialize with actual data source instead of defaulting to mock
+    if (typeof window !== 'undefined') {
+      return getDataSource();
+    }
+    return 'devnet'; // Server-side default
+  });
   const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
   const [zkLoginEmail, setZkLoginEmail] = useState<string | null>(null);
   const [blockchainStats, setBlockchainStats] = useState<UserAccountStats | null>(null);
@@ -109,11 +117,11 @@ function AccountContent() {
     // Initial fetch with loading state
     fetchData(true);
 
-    // Poll every 5 seconds without loading state
-    const interval = setInterval(() => fetchData(false), 5000);
+    // Poll based on user's selected interval (in seconds)
+    const interval = setInterval(() => fetchData(false), pollingInterval * 1000);
 
     return () => clearInterval(interval);
-  }, [connectedAddress, isMock, fetchData]);
+  }, [connectedAddress, isMock, fetchData, pollingInterval]);
 
   // Generate short address
   const shortAddress = connectedAddress
@@ -378,9 +386,9 @@ function OverviewTab({
                   <tr className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center">
-                          <svg className="w-4 h-5" viewBox="0 0 29 36" fill="currentColor">
-                            <path className="text-cyan-500" fillRule="evenodd" clipRule="evenodd" d="M22.5363 15.0142L22.5357 15.0158C24.0044 16.8574 24.8821 19.1898 24.8821 21.7268C24.8821 24.3014 23.9781 26.6655 22.4698 28.5196L22.3399 28.6792L22.3055 28.4763C22.2762 28.3038 22.2418 28.1296 22.2018 27.954C21.447 24.6374 18.9876 21.7934 14.9397 19.4907C12.2063 17.9399 10.6417 16.0727 10.2309 13.9511C9.96558 12.5792 10.1628 11.2012 10.544 10.0209C10.9251 8.84103 11.4919 7.85247 11.9735 7.2573L11.9738 7.25692L13.5484 5.3315C13.8246 4.99384 14.3413 4.99384 14.6175 5.3315L22.5363 15.0142ZM25.0269 13.0906L25.0272 13.0898L14.4731 0.184802C14.2715 -0.0616007 13.8943 -0.0616009 13.6928 0.184802L3.1385 13.09L3.13878 13.0907L3.10444 13.1333C1.16226 15.5434 0 18.6061 0 21.9402C0 29.7051 6.30498 36 14.0829 36C21.8608 36 28.1658 29.7051 28.1658 21.9402C28.1658 18.6062 27.0035 15.5434 25.0614 13.1333L25.0269 13.0906ZM5.66381 14.9727L5.66423 14.9721L6.60825 13.8178L6.63678 14.0309C6.65938 14.1997 6.68678 14.3694 6.71928 14.5398C7.33009 17.7446 9.51208 20.4169 13.1602 22.4865C16.3312 24.2912 18.1775 26.3666 18.7095 28.6427C18.9314 29.5926 18.971 30.5272 18.8749 31.3443L18.8689 31.3948L18.8232 31.4172C17.3919 32.1164 15.783 32.5088 14.0826 32.5088C8.11832 32.5088 3.28308 27.6817 3.28308 21.7268C3.28308 19.1701 4.17443 16.8208 5.66381 14.9727Z" />
+                        <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                          <svg className="w-4 h-5" viewBox="0 0 29 36">
+                            <path fill="#6FBCF0" fillRule="evenodd" clipRule="evenodd" d="M22.5363 15.0142L22.5357 15.0158C24.0044 16.8574 24.8821 19.1898 24.8821 21.7268C24.8821 24.3014 23.9781 26.6655 22.4698 28.5196L22.3399 28.6792L22.3055 28.4763C22.2762 28.3038 22.2418 28.1296 22.2018 27.954C21.447 24.6374 18.9876 21.7934 14.9397 19.4907C12.2063 17.9399 10.6417 16.0727 10.2309 13.9511C9.96558 12.5792 10.1628 11.2012 10.544 10.0209C10.9251 8.84103 11.4919 7.85247 11.9735 7.2573L11.9738 7.25692L13.5484 5.3315C13.8246 4.99384 14.3413 4.99384 14.6175 5.3315L22.5363 15.0142ZM25.0269 13.0906L25.0272 13.0898L14.4731 0.184802C14.2715 -0.0616007 13.8943 -0.0616009 13.6928 0.184802L3.1385 13.09L3.13878 13.0907L3.10444 13.1333C1.16226 15.5434 0 18.6061 0 21.9402C0 29.7051 6.30498 36 14.0829 36C21.8608 36 28.1658 29.7051 28.1658 21.9402C28.1658 18.6062 27.0035 15.5434 25.0614 13.1333L25.0269 13.0906ZM5.66381 14.9727L5.66423 14.9721L6.60825 13.8178L6.63678 14.0309C6.65938 14.1997 6.68678 14.3694 6.71928 14.5398C7.33009 17.7446 9.51208 20.4169 13.1602 22.4865C16.3312 24.2912 18.1775 26.3666 18.7095 28.6427C18.9314 29.5926 18.971 30.5272 18.8749 31.3443L18.8689 31.3948L18.8232 31.4172C17.3919 32.1164 15.783 32.5088 14.0826 32.5088C8.11832 32.5088 3.28308 27.6817 3.28308 21.7268C3.28308 19.1701 4.17443 16.8208 5.66381 14.9727Z" />
                           </svg>
                         </div>
                         <div>
@@ -877,11 +885,11 @@ function SettingsTab() {
     }
   };
 
-  // Common button styles for all settings options
-  const getOptionButtonClass = (isActive: boolean) => `px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+  // Common button styles for all settings options (matches FilterButton from campaigns page)
+  const getOptionButtonClass = (isActive: boolean) => `px-3 py-1.5 rounded-full text-sm transition ${
     isActive
-      ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/20'
-      : 'bg-gray-50 dark:bg-white/[0.02] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04]'
+      ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'
+      : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
   }`;
 
   // Languages split into verified (human-checked) and AI generated (machine translations)

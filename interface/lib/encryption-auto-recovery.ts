@@ -9,7 +9,7 @@ import { encryptData, decryptData } from './crypto';
 /**
  * Parse JWT token (for zkLogin Google sub extraction)
  */
-function parseJWT(token: string): { sub: string; aud: string; iss: string } | null {
+function parseJWT(token: string): { sub: string; aud: string; iss: string; exp?: number } | null {
   try {
     const base64Url = token.split('.')[1];
     if (!base64Url) return null;
@@ -29,14 +29,76 @@ function parseJWT(token: string): { sub: string; aud: string; iss: string } | nu
 }
 
 /**
+ * Check if JWT token is expired or will expire soon
+ * Returns true if token is valid and not expiring soon (more than 5 minutes left)
+ */
+function isJWTValid(token: string): boolean {
+  const decoded = parseJWT(token);
+  if (!decoded || !decoded.exp) {
+    console.log('[JWT Check] No expiration in token or failed to parse');
+    return false;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresIn = decoded.exp - now;
+
+  // Consider token invalid if it expires in less than 5 minutes (300 seconds)
+  const isValid = expiresIn > 300;
+
+  if (!isValid) {
+    console.log(`[JWT Check] Token expired or expiring soon (${expiresIn}s remaining)`);
+  }
+
+  return isValid;
+}
+
+/**
+ * Trigger zkLogin session refresh if token is expired
+ * Returns true if refresh was triggered, false otherwise
+ */
+async function triggerSessionRefreshIfNeeded(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+
+  const jwt = sessionStorage.getItem('zklogin_jwt');
+  if (!jwt) {
+    console.log('[Auto-Recovery] No JWT token found, skipping refresh check');
+    return false;
+  }
+
+  if (!isJWTValid(jwt)) {
+    console.log('[Auto-Recovery] JWT token expired, triggering session refresh...');
+
+    // Import zklogin-utils dynamically to avoid circular dependencies
+    try {
+      const { refreshZkLoginSession } = await import('./zklogin-utils');
+      await refreshZkLoginSession();
+      return true;
+    } catch (error) {
+      console.error('[Auto-Recovery] Failed to trigger session refresh:', error);
+      return false;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Get Google sub from zkLogin JWT
  * Returns sub if available, null otherwise
+ * Checks token validity and triggers refresh if needed
  */
-function getGoogleSub(): string | null {
+async function getGoogleSub(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
 
   const jwt = sessionStorage.getItem('zklogin_jwt');
   if (!jwt) return null;
+
+  // Check if token is valid and trigger refresh if needed
+  const refreshTriggered = await triggerSessionRefreshIfNeeded();
+  if (refreshTriggered) {
+    // Refresh was triggered, return null so the operation can retry after redirect
+    return null;
+  }
 
   const decoded = parseJWT(jwt);
   return decoded?.sub || null;
@@ -46,13 +108,14 @@ function getGoogleSub(): string | null {
  * Get creator key for password generation
  * For Google: directly uses Google sub
  * For Wallet: derives from signature of "creator_key_{campaignSeed}"
+ * Returns null if no authentication method is available
  */
 export async function getCreatorKey(
   campaignSeed: string,
   signMessage?: (message: string) => Promise<string>
-): Promise<string> {
+): Promise<string | null> {
   // Try Google zkLogin first
-  const googleSub = getGoogleSub();
+  const googleSub = await getGoogleSub();
   if (googleSub) {
     console.log('[Auto-Recovery] Using Google sub as creator key');
     return googleSub;
@@ -68,11 +131,13 @@ export async function getCreatorKey(
       return hashedKey;
     } catch (error) {
       console.error('[Auto-Recovery] Failed to get wallet signature:', error);
-      throw new Error('Failed to sign message with wallet');
+      return null;
     }
   }
 
-  throw new Error('No authentication method available (need Google or Wallet)');
+  // No authentication method available - this is expected for automatic unlock attempts
+  console.log('[Auto-Recovery] No authentication method available for creator key (expected for automatic unlock)');
+  return null;
 }
 
 /**
@@ -87,12 +152,13 @@ export function generatePasswordFromSeed(campaignSeed: string, creatorKey: strin
  * Get personal decryption key for participants
  * For Google: hash of Google sub
  * For Wallet: hash of signature of "key_derivation_v1"
+ * Returns null if no authentication method is available
  */
 export async function getPersonalKey(
   signMessage?: (message: string) => Promise<string>
-): Promise<string> {
+): Promise<string | null> {
   // Try Google zkLogin first
-  const googleSub = getGoogleSub();
+  const googleSub = await getGoogleSub();
   if (googleSub) {
     const hashedKey = CryptoJS.SHA256(googleSub).toString();
     return hashedKey;
@@ -107,11 +173,13 @@ export async function getPersonalKey(
       return hashedKey;
     } catch (error) {
       console.error('[Auto-Recovery] Failed to get wallet signature:', error);
-      throw new Error('Failed to sign message with wallet');
+      return null;
     }
   }
 
-  throw new Error('No authentication method available (need Google or Wallet)');
+  // No authentication method available - this is expected for automatic unlock attempts
+  console.log('[Auto-Recovery] No authentication method available for personal key (expected for automatic unlock)');
+  return null;
 }
 
 /**
@@ -169,16 +237,17 @@ export async function tryCreatorAutoUnlock(
     return null;
   }
 
-  try {
-    console.log('[Auto-Recovery] Attempting creator auto-unlock...');
-    const creatorKey = await getCreatorKey(campaignSeed, signMessage);
-    const password = generatePasswordFromSeed(campaignSeed, creatorKey);
-    console.log('[Auto-Recovery] Creator auto-unlock successful');
-    return password;
-  } catch (error) {
-    console.error('[Auto-Recovery] Creator auto-unlock failed:', error);
+  console.log('[Auto-Recovery] Attempting creator auto-unlock...');
+  const creatorKey = await getCreatorKey(campaignSeed, signMessage);
+
+  if (!creatorKey) {
+    console.log('[Auto-Recovery] Creator auto-unlock not available (no authentication method)');
     return null;
   }
+
+  const password = generatePasswordFromSeed(campaignSeed, creatorKey);
+  console.log('[Auto-Recovery] Creator auto-unlock successful');
+  return password;
 }
 
 /**
@@ -194,9 +263,15 @@ export async function tryParticipantAutoUnlock(
     return null;
   }
 
+  console.log('[Auto-Recovery] Attempting participant auto-unlock...');
+  const personalKey = await getPersonalKey(signMessage);
+
+  if (!personalKey) {
+    console.log('[Auto-Recovery] Participant auto-unlock not available (no authentication method)');
+    return null;
+  }
+
   try {
-    console.log('[Auto-Recovery] Attempting participant auto-unlock...');
-    const personalKey = await getPersonalKey(signMessage);
     const password = await decryptPasswordFromStorage(responseSeed, personalKey);
     console.log('[Auto-Recovery] Participant auto-unlock successful');
     return password;
@@ -207,19 +282,35 @@ export async function tryParticipantAutoUnlock(
 }
 
 /**
- * Generate campaign seed (UUID)
+ * Generate campaign seed (256-bit random hex string)
  * This is public and stored on blockchain
  */
 export function generateCampaignSeed(): string {
-  // Use crypto.randomUUID() if available (Node 19+, modern browsers)
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
+  // Use crypto.getRandomValues() for secure 256-bit random generation
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint8Array(32); // 32 bytes = 256 bits
+    crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
   }
 
-  // Fallback: generate UUID v4 manually
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  // Fallback: use CryptoJS random (32 bytes = 256 bits)
+  const random = CryptoJS.lib.WordArray.random(32);
+  return random.toString(CryptoJS.enc.Hex);
+}
+
+/**
+ * Generate response seed (256-bit random hex string)
+ * Used for participant auto-recovery, stored encrypted on blockchain
+ */
+export function generateResponseSeed(): string {
+  // Use crypto.getRandomValues() for secure 256-bit random generation
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint8Array(32); // 32 bytes = 256 bits
+    crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Fallback: use CryptoJS random (32 bytes = 256 bits)
+  const random = CryptoJS.lib.WordArray.random(32);
+  return random.toString(CryptoJS.enc.Hex);
 }

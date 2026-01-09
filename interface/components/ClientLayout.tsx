@@ -3,9 +3,11 @@
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
+import { PollingProvider } from '@/contexts/PollingContext';
 import { Providers } from '@/app/providers';
 import { SettingsMenu } from '@/components/SettingsMenu';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { PollingIntervalSelector } from '@/components/PollingIntervalSelector';
 import { ConnectOptionsModal } from '@/components/ConnectOptionsModal';
 import { Footer } from '@/components/Footer';
 import { LogoIcon } from '@/components/LogoIcon';
@@ -545,6 +547,9 @@ function LayoutContent({ children }: { children: ReactNode }) {
               {/* Theme toggle for mobile */}
               <ThemeToggle />
 
+              {/* Polling interval for mobile */}
+              <PollingIntervalSelector />
+
               {/* Settings for mobile */}
               <SettingsMenu />
             </div>
@@ -648,6 +653,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
               </button>
             )}
           <ThemeToggle />
+          <PollingIntervalSelector />
           <SettingsMenu />
           </div>
           )}
@@ -688,9 +694,11 @@ export function ClientLayout({ children }: { children: ReactNode }) {
     <ThemeProvider>
       <LanguageProvider>
         <CurrencyProvider>
-          <Providers>
-            <LayoutContent>{children}</LayoutContent>
-          </Providers>
+          <PollingProvider>
+            <Providers>
+              <LayoutContent>{children}</LayoutContent>
+            </Providers>
+          </PollingProvider>
         </CurrencyProvider>
       </LanguageProvider>
     </ThemeProvider>

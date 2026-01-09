@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignPersonalMessage } from '@mysten/dapp-kit';
 import Link from 'next/link';
 import { useCopyLink } from '@/hooks/useCopyLink';
 import {
@@ -15,6 +15,7 @@ import {
   CampaignDetails,
 } from '@/lib/mock-data';
 import { ClientDate } from '@/components/ClientDate';
+import { formatTime, formatDate } from '@/lib/format-date';
 import { getDataSource } from '@/lib/sui-config';
 import { fetchCampaignsByCreator, fetchParticipatedCampaigns, ParticipatedCampaign } from '@/lib/sui-service';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,6 +27,7 @@ import {
   tryParticipantAutoUnlock,
 } from '@/lib/encryption-auto-recovery';
 import { getUserResponse } from '@/lib/sui-service';
+import { usePollingInterval } from '@/contexts/PollingContext';
 
 type TabType = 'created' | 'participated';
 
@@ -33,11 +35,29 @@ function CampaignsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const account = useCurrentAccount();
+  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage();
   const { requireAuth } = useAuth();
   const { copyLink, isCopied } = useCopyLink();
+  const { pollingInterval } = usePollingInterval();
   const tabParam = searchParams.get('tab') as TabType | null;
   const [activeTab, setActiveTab] = useState<TabType>('created');
   const [statusFilter, setStatusFilter] = useState<CampaignStatus | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Store separate sort state for each tab
+  const [createdTabSort, setCreatedTabSort] = useState<{
+    field: 'title' | 'responses' | 'created' | 'ended' | null;
+    direction: 'asc' | 'desc';
+  }>({ field: 'created', direction: 'desc' });
+
+  const [participatedTabSort, setParticipatedTabSort] = useState<{
+    field: 'title' | 'responded' | 'ended' | null;
+    direction: 'asc' | 'desc';
+  }>({ field: 'responded', direction: 'desc' });
+
+  // Current sort state based on active tab
+  const sortField = activeTab === 'created' ? createdTabSort.field : participatedTabSort.field;
+  const sortDirection = activeTab === 'created' ? createdTabSort.direction : participatedTabSort.direction;
 
   // Blockchain campaigns state
   const [blockchainCampaigns, setBlockchainCampaigns] = useState<CampaignDetails[]>([]);
@@ -142,12 +162,12 @@ function CampaignsContent() {
       // Initial fetch with loading state
       fetchData(true);
 
-      // Poll every 5 seconds without loading state
-      const interval = setInterval(() => fetchData(false), 5000);
+      // Poll based on user's selected interval (in seconds)
+      const interval = setInterval(() => fetchData(false), pollingInterval * 1000);
 
       return () => clearInterval(interval);
     }
-  }, [connectedAddress, fetchData]);
+  }, [connectedAddress, fetchData, pollingInterval]);
 
   // Try to decrypt encrypted campaigns using auto-recovery
   useEffect(() => {
@@ -174,15 +194,18 @@ function CampaignsContent() {
         password = getStoredPassword(campaign.id, connectedAddress);
 
         // Priority 2: Try creator auto-unlock (if user is creator)
+        // Only Google zkLogin - no automatic wallet signatures
         if (!password && campaign.campaignSeed && campaign.creator?.address === connectedAddress) {
           try {
+            // Don't pass wallet signature function - only Google zkLogin will work automatically
             password = await tryCreatorAutoUnlock(
               campaign.campaignSeed,
               campaign.creator.address,
-              connectedAddress
+              connectedAddress,
+              undefined // No wallet signature for automatic unlock
             );
             if (password) {
-              console.log(`[Auto-Recovery] Creator auto-unlock successful for campaign ${campaign.id}`);
+              console.log(`[Auto-Recovery] Creator auto-unlock successful (Google) for campaign ${campaign.id}`);
             }
           } catch (error) {
             console.error(`[Auto-Recovery] Creator auto-unlock failed for campaign ${campaign.id}:`, error);
@@ -190,11 +213,13 @@ function CampaignsContent() {
         }
 
         // Priority 3: Try participant auto-unlock (if user participated)
+        // Only Google zkLogin - no automatic wallet signatures
         if (!password) {
           try {
             const userResponse = await getUserResponse(campaign.id, connectedAddress);
             if (userResponse?.responseSeed) {
-              password = await tryParticipantAutoUnlock(userResponse.responseSeed);
+              // Don't pass wallet signature function - only Google zkLogin will work automatically
+              password = await tryParticipantAutoUnlock(userResponse.responseSeed, undefined);
             }
           } catch (error) {
             console.error(`[Auto-Recovery] Participant auto-unlock failed for campaign ${campaign.id}:`, error);
@@ -290,12 +315,78 @@ function CampaignsContent() {
   const getFilteredCampaigns = () => {
     const campaigns = getCampaigns();
     return campaigns.filter(c => {
+      // Status filter
       if (statusFilter && c.status !== statusFilter) return false;
+
+      // Search filter (by campaign title)
+      if (searchQuery) {
+        const title = (decryptedCache[c.id]?.title || c.title).toLowerCase();
+        if (!title.includes(searchQuery.toLowerCase())) return false;
+      }
+
       return true;
     });
   };
 
-  const filteredCampaigns = getFilteredCampaigns();
+  // Apply sorting
+  const getSortedCampaigns = (campaigns: (PortfolioCampaign | ActivityCampaign)[]) => {
+    if (!sortField) return campaigns;
+
+    return [...campaigns].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortField) {
+        case 'title':
+          const aTitle = decryptedCache[a.id]?.title || a.title;
+          const bTitle = decryptedCache[b.id]?.title || b.title;
+          aValue = aTitle.toLowerCase();
+          bValue = bTitle.toLowerCase();
+          break;
+        case 'responses':
+          aValue = 'responsesCount' in a ? (a.responsesCount || 0) : 0;
+          bValue = 'responsesCount' in b ? (b.responsesCount || 0) : 0;
+          break;
+        case 'created':
+          aValue = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          bValue = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          break;
+        case 'responded':
+          aValue = 'respondedAt' in a ? new Date(a.respondedAt).getTime() : 0;
+          bValue = 'respondedAt' in b ? new Date(b.respondedAt).getTime() : 0;
+          break;
+        case 'ended':
+          aValue = a.endDate ? new Date(a.endDate).getTime() : 0;
+          bValue = b.endDate ? new Date(b.endDate).getTime() : 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const filteredCampaigns = getSortedCampaigns(getFilteredCampaigns());
+
+  // Handle sort
+  const handleSort = (field: 'title' | 'responses' | 'created' | 'responded' | 'ended') => {
+    if (activeTab === 'created') {
+      if (createdTabSort.field === field) {
+        setCreatedTabSort({ field, direction: createdTabSort.direction === 'asc' ? 'desc' : 'asc' });
+      } else {
+        setCreatedTabSort({ field: field as typeof createdTabSort.field, direction: 'desc' });
+      }
+    } else {
+      if (participatedTabSort.field === field) {
+        setParticipatedTabSort({ field, direction: participatedTabSort.direction === 'asc' ? 'desc' : 'asc' });
+      } else {
+        setParticipatedTabSort({ field: field as typeof participatedTabSort.field, direction: 'desc' });
+      }
+    }
+  };
 
   // Stats for each tab
   const getStats = () => {
@@ -398,13 +489,6 @@ function CampaignsContent() {
             Participated
           </TabButton>
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-          {activeTab === 'created' && (
-            <>
-              {stats.responses !== undefined && stats.responses > 1 && <span><strong className="text-cyan-600 dark:text-cyan-400">{stats.responses}</strong> responses</span>}
-            </>
-          )}
-        </div>
       </div>
 
       {/* Filters */}
@@ -438,25 +522,189 @@ function CampaignsContent() {
         )}
       </div>
 
-      {/* Campaign list */}
-      <div className="space-y-4">
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <svg className="animate-spin h-8 w-8 text-cyan-500" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          </div>
-        ) : (
-          filteredCampaigns.map(campaign => (
-            activeTab === 'participated' ? (
-              <ParticipatingCard key={campaign.id} campaign={campaign as ActivityCampaign} copyLink={copyLink} isCopied={isCopied} decrypted={decryptedCache[campaign.id]} />
-            ) : (
-              <CreatedCard key={campaign.id} campaign={campaign as PortfolioCampaign} copyLink={copyLink} isCopied={isCopied} decrypted={decryptedCache[campaign.id]} />
-            )
-          ))
-        )}
+      {/* Search input */}
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Search campaigns..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 dark:focus:ring-cyan-400"
+        />
       </div>
+
+      {/* Campaign list */}
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <svg className="animate-spin h-8 w-8 text-cyan-500" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        </div>
+      ) : filteredCampaigns.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              {/* Mobile header */}
+              <tr className="md:hidden border-b border-gray-200 dark:border-white/[0.06]">
+                <th
+                  className="text-center text-xs font-medium text-gray-500 dark:text-gray-400 px-2 py-2 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none w-[70px]"
+                  onClick={() => handleSort(activeTab === 'participated' ? 'responded' : 'created')}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    {activeTab === 'participated' ? 'Resp.' : 'Created'}
+                    {sortField === (activeTab === 'participated' ? 'responded' : 'created') && (
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {sortDirection === 'asc' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        )}
+                      </svg>
+                    )}
+                  </div>
+                </th>
+                <th
+                  className="text-center text-xs font-medium text-gray-500 dark:text-gray-400 px-2 py-2 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none"
+                  onClick={() => handleSort('title')}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    Campaign
+                    {sortField === 'title' && (
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {sortDirection === 'asc' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        )}
+                      </svg>
+                    )}
+                  </div>
+                </th>
+                <th
+                  className="text-center text-xs font-medium text-gray-500 dark:text-gray-400 px-2 py-2 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none w-[70px]"
+                  onClick={() => handleSort('ended')}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    End Date
+                    {sortField === 'ended' && (
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {sortDirection === 'asc' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        )}
+                      </svg>
+                    )}
+                  </div>
+                </th>
+              </tr>
+
+              {/* Desktop header: Single row with all columns */}
+              <tr className="hidden md:table-row border-b border-gray-200 dark:border-white/[0.06]">
+                <th
+                  className="text-center text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none"
+                  onClick={() => handleSort('created')}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    Created
+                    {sortField === 'created' && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {sortDirection === 'asc' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        )}
+                      </svg>
+                    )}
+                  </div>
+                </th>
+                <th
+                  className="text-center text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none"
+                  onClick={() => handleSort('title')}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    Campaign
+                    {sortField === 'title' && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {sortDirection === 'asc' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        )}
+                      </svg>
+                    )}
+                  </div>
+                </th>
+                {activeTab === 'participated' && (
+                  <th
+                    className="text-center text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none"
+                    onClick={() => handleSort('responded')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      Responded
+                      {sortField === 'responded' && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          {sortDirection === 'asc' ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                          ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          )}
+                        </svg>
+                      )}
+                    </div>
+                  </th>
+                )}
+                {activeTab === 'created' && (
+                  <th
+                    className="text-center text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none"
+                    onClick={() => handleSort('responses')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      Responses
+                      {sortField === 'responses' && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          {sortDirection === 'asc' ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                          ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          )}
+                        </svg>
+                      )}
+                    </div>
+                  </th>
+                )}
+                <th
+                  className="text-center text-sm font-medium text-gray-500 dark:text-gray-400 px-4 py-3 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none"
+                  onClick={() => handleSort('ended')}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    End Date
+                    {sortField === 'ended' && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {sortDirection === 'asc' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        )}
+                      </svg>
+                    )}
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCampaigns.map(campaign => (
+                activeTab === 'participated' ? (
+                  <ParticipatingRow key={campaign.id} campaign={campaign as ActivityCampaign} copyLink={copyLink} isCopied={isCopied} decrypted={decryptedCache[campaign.id]} />
+                ) : (
+                  <CreatedRow key={campaign.id} campaign={campaign as PortfolioCampaign} copyLink={copyLink} isCopied={isCopied} decrypted={decryptedCache[campaign.id]} />
+                )
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
 
       {/* Empty state */}
       {!isLoading && filteredCampaigns.length === 0 && (
@@ -464,13 +712,16 @@ function CampaignsContent() {
           <div className="text-gray-500 dark:text-gray-500 mb-4">
             {isWalletRequired && !isWalletConnected ? (
               "Please log in to view your campaigns"
+            ) : (statusFilter || searchQuery) ? (
+              // Filters are active but no campaigns match
+              "No campaigns match the selected filters"
             ) : activeTab === 'created' ? (
               "You haven't created any campaigns yet"
             ) : (
               "You haven't participated in any campaigns yet"
             )}
           </div>
-          {activeTab === 'created' && isWalletConnected && (
+          {activeTab === 'created' && isWalletConnected && !statusFilter && !searchQuery && (
             <button
               onClick={() => {
                 const targetPath = '/campaigns/new';
@@ -596,6 +847,12 @@ function CreatedCard({ campaign, copyLink, isCopied, decrypted }: {
             {campaign.responsesCount !== undefined && campaign.responsesCount > 1 && (
               <span><strong className="text-gray-900 dark:text-white">{campaign.responsesCount}</strong> responses</span>
             )}
+            {campaign.createdAt && (
+              <ClientDate
+                dateString={campaign.createdAt}
+                prefix="Created "
+              />
+            )}
             {campaign.endDate && (
               <ClientDate
                 dateString={campaign.endDate}
@@ -672,6 +929,12 @@ function ParticipatingCard({ campaign, copyLink, isCopied, decrypted }: {
             </span>
           </div>
           <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+            {campaign.createdAt && (
+              <ClientDate
+                dateString={campaign.createdAt}
+                prefix="Created "
+              />
+            )}
             <ClientDate dateString={campaign.respondedAt} prefix="Responded " />
             {campaign.endDate && (
               <ClientDate
@@ -703,6 +966,273 @@ function ParticipatingCard({ campaign, copyLink, isCopied, decrypted }: {
         </button>
       </div>
     </Link>
+  );
+}
+
+// Row for "Created" tab (table format)
+function CreatedRow({ campaign, copyLink, isCopied, decrypted }: {
+  campaign: PortfolioCampaign;
+  copyLink: (id: string, e?: React.MouseEvent) => void;
+  isCopied: (id: string) => boolean;
+  decrypted?: { title: string; description: string };
+}) {
+  const mainLink = `/campaigns/${campaign.id}`;
+  const router = useRouter();
+
+  // For encrypted campaigns without decrypted data, show placeholder
+  const isEncryptedLocked = campaign.isEncrypted && !decrypted;
+  const displayTitle = isEncryptedLocked ? 'Encrypted Campaign' : (decrypted?.title ?? campaign.title);
+
+  const handleRowClick = () => {
+    saveReferrer(mainLink);
+    router.push(mainLink);
+  };
+
+  return (
+    <>
+      {/* Mobile: Single row with Created - Campaign - End Date */}
+      <tr
+        className="md:hidden border-b border-gray-200 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer"
+        onClick={handleRowClick}
+      >
+        <td className="px-2 py-4 text-xs w-[70px]">
+          {campaign.createdAt ? (
+            <div>
+              <div className="text-gray-900 dark:text-white">
+                {formatDate(campaign.createdAt)}
+              </div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                {formatTime(new Date(campaign.createdAt))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-2 py-4 text-xs">
+          <div className="flex items-center gap-2">
+            {campaign.isEncrypted ? (
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-cyan-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            )}
+            <span className="text-sm font-medium text-gray-900 dark:text-white break-words">
+              {displayTitle}
+            </span>
+          </div>
+        </td>
+        <td className="px-2 py-4 text-xs w-[70px]">
+          {campaign.endDate ? (
+            <div>
+              <div className="text-gray-900 dark:text-white">
+                {formatDate(campaign.endDate)}
+              </div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                {formatTime(new Date(campaign.endDate))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+      </tr>
+
+      {/* Desktop: Single row */}
+      <tr
+        className="hidden md:table-row border-b border-gray-200 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer"
+        onClick={handleRowClick}
+      >
+        <td className="px-4 py-5">
+          {campaign.createdAt ? (
+            <div>
+              <div className="text-sm text-gray-900 dark:text-white">
+                {formatDate(campaign.createdAt)}
+              </div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                {formatTime(new Date(campaign.createdAt))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-4 py-5">
+          <div className="flex items-center gap-2">
+            {campaign.isEncrypted ? (
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-cyan-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            )}
+            <span className="text-sm font-medium text-gray-900 dark:text-white">
+              {displayTitle}
+            </span>
+          </div>
+        </td>
+        <td className="px-4 py-5 text-center">
+          <span className="text-sm text-gray-900 dark:text-white">
+            {campaign.responsesCount !== undefined && campaign.responsesCount > 0 ? campaign.responsesCount : '—'}
+          </span>
+        </td>
+        <td className="px-4 py-5">
+          {campaign.endDate ? (
+            <div>
+              <div className="text-sm text-gray-900 dark:text-white">
+                {formatDate(campaign.endDate)}
+              </div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                {formatTime(new Date(campaign.endDate))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400">—</span>
+          )}
+        </td>
+      </tr>
+    </>
+  );
+}
+
+// Row for "Participated" tab (table format)
+function ParticipatingRow({ campaign, copyLink, isCopied, decrypted }: {
+  campaign: ActivityCampaign;
+  copyLink: (id: string, e?: React.MouseEvent) => void;
+  isCopied: (id: string) => boolean;
+  decrypted?: { title: string; description: string };
+}) {
+  const mainLink = `/campaigns/${campaign.id}`;
+  const router = useRouter();
+
+  // For encrypted campaigns without decrypted data, show placeholder
+  const isEncryptedLocked = campaign.isEncrypted && !decrypted;
+  const displayTitle = isEncryptedLocked ? 'Encrypted Campaign' : (decrypted?.title ?? campaign.title);
+
+  const handleRowClick = () => {
+    saveReferrer(mainLink);
+    router.push(mainLink);
+  };
+
+  return (
+    <>
+      {/* Mobile: Single row with Responded - Campaign - End Date */}
+      <tr
+        className="md:hidden border-b border-gray-200 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer"
+        onClick={handleRowClick}
+      >
+        <td className="px-2 py-4 text-xs w-[70px]">
+          {campaign.respondedAt ? (
+            <div>
+              <div className="text-gray-900 dark:text-white">
+                {formatDate(campaign.respondedAt)}
+              </div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                {formatTime(new Date(campaign.respondedAt))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-2 py-4 text-xs">
+          <div className="flex items-center gap-2">
+            {campaign.isEncrypted ? (
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-cyan-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            )}
+            <span className="text-sm font-medium text-gray-900 dark:text-white break-words">
+              {displayTitle}
+            </span>
+          </div>
+        </td>
+        <td className="px-2 py-4 text-xs w-[70px]">
+          {campaign.endDate ? (
+            <div>
+              <div className="text-gray-900 dark:text-white">
+                {formatDate(campaign.endDate)}
+              </div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                {formatTime(new Date(campaign.endDate))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+      </tr>
+
+      {/* Desktop: Single row */}
+      <tr
+        className="hidden md:table-row border-b border-gray-200 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer"
+        onClick={handleRowClick}
+      >
+        <td className="px-4 py-5">
+          {campaign.createdAt ? (
+            <div>
+              <div className="text-sm text-gray-900 dark:text-white">
+                {formatDate(campaign.createdAt)}
+              </div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                {formatTime(new Date(campaign.createdAt))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-4 py-5">
+          <div className="flex items-center gap-2">
+            {campaign.isEncrypted ? (
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-cyan-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            )}
+            <span className="text-sm font-medium text-gray-900 dark:text-white">
+              {displayTitle}
+            </span>
+          </div>
+        </td>
+        <td className="px-4 py-5">
+          <div>
+            <div className="text-sm text-gray-900 dark:text-white">
+              {formatDate(campaign.respondedAt)}
+            </div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+              {formatTime(new Date(campaign.respondedAt))}
+            </div>
+          </div>
+        </td>
+        <td className="px-4 py-5">
+          {campaign.endDate ? (
+            <div>
+              <div className="text-sm text-gray-900 dark:text-white">
+                {formatDate(campaign.endDate)}
+              </div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                {formatTime(new Date(campaign.endDate))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400">—</span>
+          )}
+        </td>
+      </tr>
+    </>
   );
 }
 
