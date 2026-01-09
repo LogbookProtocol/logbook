@@ -452,10 +452,14 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
           // Get personal key (works for both Google and Wallet)
           const personalKey = await getPersonalKey();
 
-          // Encrypt password with personal key
-          responseSeed = await encryptPasswordForStorage(campaignPassword, personalKey);
-          console.log('response_seed generated successfully (encrypted password for auto-recovery)');
-          console.log('=== RESPONSE_SEED GENERATION COMPLETE ===');
+          if (personalKey) {
+            // Encrypt password with personal key
+            responseSeed = await encryptPasswordForStorage(campaignPassword, personalKey as string);
+            console.log('response_seed generated successfully (encrypted password for auto-recovery)');
+            console.log('=== RESPONSE_SEED GENERATION COMPLETE ===');
+          } else {
+            console.log('No personal key available, skipping response_seed generation');
+          }
         } catch (error) {
           console.error('Failed to generate response_seed:', error);
           console.log('Continuing without response_seed (participant will need to enter password again)');
