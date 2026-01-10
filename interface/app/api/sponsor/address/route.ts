@@ -27,8 +27,8 @@ export async function GET() {
     const treasury = getTreasuryKeypair();
     const address = treasury.toSuiAddress();
 
-    // Get balance (devnet)
-    const client = new SuiClient({ url: 'https://fullnode.devnet.sui.io:443' });
+    // Get balance (testnet)
+    const client = new SuiClient({ url: 'https://fullnode.testnet.sui.io:443' });
     const balance = await client.getBalance({ owner: address });
 
     return NextResponse.json({

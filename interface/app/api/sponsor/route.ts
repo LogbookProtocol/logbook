@@ -50,8 +50,8 @@ function getTreasuryKeypair(): Ed25519Keypair {
 
 // Get Sui client based on network
 function getSuiClient(): SuiClient {
-  // Use devnet (contract and zkLogin prover are on devnet)
-  return new SuiClient({ url: 'https://fullnode.devnet.sui.io:443' });
+  // Use testnet (contract and zkLogin prover are on testnet)
+  return new SuiClient({ url: 'https://fullnode.testnet.sui.io:443' });
 }
 
 export async function POST(request: NextRequest) {

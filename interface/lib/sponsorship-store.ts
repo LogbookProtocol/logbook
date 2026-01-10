@@ -18,9 +18,9 @@ const SUI_CONFIG = {
   },
 };
 
-// Get current network from env or default to devnet
+// Get current network from env or default to testnet
 function getNetwork(): 'devnet' | 'testnet' {
-  return (process.env.SUI_NETWORK as 'devnet' | 'testnet') || 'devnet';
+  return (process.env.SUI_NETWORK as 'devnet' | 'testnet') || 'testnet';
 }
 
 function createSuiClient(): SuiClient {

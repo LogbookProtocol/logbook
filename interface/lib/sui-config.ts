@@ -26,15 +26,15 @@ const DATA_SOURCE_KEY = 'logbook-data-source';
 export type DataSource = 'mock' | 'devnet' | 'testnet' | 'mainnet';
 
 export function getDataSource(): DataSource {
-  if (typeof window === 'undefined') return 'devnet';
+  if (typeof window === 'undefined') return 'testnet';
   const stored = localStorage.getItem(DATA_SOURCE_KEY);
   // Only allow devnet, testnet, mainnet - no mock mode
   if (stored === 'devnet' || stored === 'testnet' || stored === 'mainnet') {
     return stored;
   }
-  // Default to devnet and save it
-  localStorage.setItem(DATA_SOURCE_KEY, 'devnet');
-  return 'devnet';
+  // Default to testnet and save it
+  localStorage.setItem(DATA_SOURCE_KEY, 'testnet');
+  return 'testnet';
 }
 
 export function setDataSource(source: DataSource): void {
