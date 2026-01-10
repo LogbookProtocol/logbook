@@ -7,8 +7,8 @@ export const SUI_CONFIG = {
     network: 'devnet' as const,
   },
   testnet: {
-    packageId: '0x6c7f7c9353b835325c3057d50ebd5920d257c70794873f09edf6b1f374ae208e',
-    registryId: '0x19e600e809c3a312738da4b4169a6d0fa79110c1de16c914874ff6cedf3c7b0b',
+    packageId: '0xff61733d87f84e583dd9030f94935fec865e88c7a917d9a3d82c561b7df1d3fe',
+    registryId: '0x5cb255688439c1898aec1ad19b44a3b01b86346ce45d000d554b6c9b46774228',
     rpcUrl: 'https://fullnode.testnet.sui.io:443',
     network: 'testnet' as const,
   },

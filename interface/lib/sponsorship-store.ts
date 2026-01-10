@@ -13,7 +13,7 @@ const SUI_CONFIG = {
     rpcUrl: 'https://fullnode.devnet.sui.io:443',
   },
   testnet: {
-    registryId: '0x19e600e809c3a312738da4b4169a6d0fa79110c1de16c914874ff6cedf3c7b0b',
+    registryId: '0x5cb255688439c1898aec1ad19b44a3b01b86346ce45d000d554b6c9b46774228',
     rpcUrl: 'https://fullnode.testnet.sui.io:443',
   },
 };
