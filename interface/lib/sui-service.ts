@@ -175,11 +175,13 @@ export async function fetchCampaignsByCreator(creatorAddress: string): Promise<C
   if (!client || !config) return [];
 
   try {
+    console.log('[fetchCampaignsByCreator] Fetching registry:', config.registryId, 'from', config.rpcUrl);
     // Get registry object
     const registry = await client.getObject({
       id: config.registryId,
       options: { showContent: true },
     });
+    console.log('[fetchCampaignsByCreator] Registry fetched successfully');
 
     if (!registry.data?.content || registry.data.content.dataType !== 'moveObject') {
       return [];
@@ -218,7 +220,16 @@ export async function fetchCampaignsByCreator(creatorAddress: string): Promise<C
         return convertCampaign(content.fields, obj.data!.objectId);
       });
   } catch (error) {
-    console.error('Error fetching campaigns by creator:', error);
+    console.error('[fetchCampaignsByCreator] Error details:', {
+      error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      config: {
+        rpcUrl: config.rpcUrl,
+        registryId: config.registryId,
+        network: config.network,
+      }
+    });
     return [];
   }
 }
@@ -1356,6 +1367,7 @@ export interface UserTransaction {
   type: 'create_campaign' | 'submit_response' | 'unknown';
   campaignId?: string;
   campaignTitle?: string;
+  isEncrypted?: boolean; // whether the campaign title is encrypted
   gasCost: number; // in SUI
   success: boolean;
   gasPayedBy: 'user' | 'logbook' | string; // 'user' = self-paid, 'logbook' = our sponsor, or address of sponsor
@@ -1506,20 +1518,25 @@ export async function fetchUserTransactions(userAddress: string): Promise<UserTr
           options: { showContent: true },
         });
 
-        const titleMap = new Map<string, string>();
+        const titleMap = new Map<string, { title: string; isEncrypted: boolean }>();
         for (const obj of campaignObjects) {
           if (obj.data?.content && obj.data.content.dataType === 'moveObject') {
-            const fields = obj.data.content.fields as { title?: string };
+            const fields = obj.data.content.fields as { title?: string; is_encrypted?: boolean };
             if (fields.title) {
-              titleMap.set(obj.data.objectId, fields.title);
+              titleMap.set(obj.data.objectId, {
+                title: fields.title,
+                isEncrypted: fields.is_encrypted || false,
+              });
             }
           }
         }
 
-        // Update transactions with campaign titles
+        // Update transactions with campaign titles and encryption status
         for (const tx of transactions) {
           if (tx.campaignId && titleMap.has(tx.campaignId)) {
-            tx.campaignTitle = titleMap.get(tx.campaignId);
+            const campaignData = titleMap.get(tx.campaignId)!;
+            tx.campaignTitle = campaignData.title;
+            tx.isEncrypted = campaignData.isEncrypted;
           }
         }
       } catch (error) {

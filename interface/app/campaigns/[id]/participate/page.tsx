@@ -177,8 +177,8 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="text-center py-12">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Campaign not found</h1>
-          <Link href="/campaigns" className="text-cyan-600 dark:text-cyan-400 hover:underline">
-            ← Back to campaigns
+          <Link href={`/campaigns/${id}`} className="text-cyan-600 dark:text-cyan-400 hover:underline">
+            ← Back to campaign
           </Link>
         </div>
       </div>
@@ -322,8 +322,8 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
 
         {/* Back link */}
         <div className="mt-6 text-center">
-          <Link href="/campaigns" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition text-sm">
-            ← Back to campaigns
+          <Link href={`/campaigns/${id}`} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition text-sm">
+            ← Back to campaign
           </Link>
         </div>
       </div>

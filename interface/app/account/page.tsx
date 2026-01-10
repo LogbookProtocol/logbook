@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCurrentAccount, useCurrentWallet } from '@mysten/dapp-kit';
@@ -30,6 +30,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Currency } from '@/contexts/CurrencyContext';
 import { LastUpdated } from '@/components/LastUpdated';
 import { usePollingInterval } from '@/contexts/PollingContext';
+import { useCampaignTitle } from '@/hooks/useCampaignTitle';
+import { saveReferrer } from '@/lib/navigation';
 
 type TabType = 'overview' | 'free-tier' | 'settings';
 
@@ -60,6 +62,7 @@ function AccountContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const isFetchingRef = useRef(false);
 
   // Get connected address (from wallet or zkLogin)
   const connectedAddress = account?.address || zkLoginAddress;
@@ -83,46 +86,72 @@ function AccountContent() {
     setDataSourceState(source);
   }, []);
 
-  // Fetch blockchain data
-  const fetchData = useCallback(async (showLoading = true) => {
-    if (!connectedAddress) return;
-    if (showLoading) setIsLoading(true);
-    try {
-      const [stats, sponsorship, balance] = await Promise.all([
-        fetchUserAccountStats(connectedAddress),
-        getSponsorshipStatus(connectedAddress),
-        fetchSuiBalance(connectedAddress),
-      ]);
-      setBlockchainStats(stats);
-      setSponsorshipStatus(sponsorship);
-      setSuiBalance(balance);
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error('Failed to fetch account data:', error);
-    } finally {
-      if (showLoading) setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [connectedAddress]);
-
+  // Manual refresh handler
   const handleManualRefresh = useCallback(() => {
+    if (!connectedAddress || isFetchingRef.current) return;
+
+    isFetchingRef.current = true;
     setIsRefreshing(true);
-    fetchData(false);
-  }, [fetchData]);
+
+    (async () => {
+      try {
+        const [stats, sponsorship, balance] = await Promise.all([
+          fetchUserAccountStats(connectedAddress),
+          getSponsorshipStatus(connectedAddress),
+          fetchSuiBalance(connectedAddress),
+        ]);
+        setBlockchainStats(stats);
+        setSponsorshipStatus(sponsorship);
+        setSuiBalance(balance);
+        setLastUpdated(new Date());
+      } catch (error) {
+        console.error('Failed to fetch account data:', error);
+      } finally {
+        setIsRefreshing(false);
+        isFetchingRef.current = false;
+      }
+    })();
+  }, [connectedAddress]);
 
   // Fetch blockchain data when address is available
   useEffect(() => {
     if (isMock || !connectedAddress) return;
 
     // Initial fetch with loading state
-    fetchData(true);
+    const doFetch = async (showLoading = true) => {
+      // Prevent concurrent fetches
+      if (isFetchingRef.current) return;
+
+      isFetchingRef.current = true;
+      if (showLoading) setIsLoading(true);
+
+      try {
+        const [stats, sponsorship, balance] = await Promise.all([
+          fetchUserAccountStats(connectedAddress),
+          getSponsorshipStatus(connectedAddress),
+          fetchSuiBalance(connectedAddress),
+        ]);
+        setBlockchainStats(stats);
+        setSponsorshipStatus(sponsorship);
+        setSuiBalance(balance);
+        setLastUpdated(new Date());
+      } catch (error) {
+        console.error('Failed to fetch account data:', error);
+      } finally {
+        if (showLoading) setIsLoading(false);
+        setIsRefreshing(false);
+        isFetchingRef.current = false;
+      }
+    };
+
+    doFetch(true);
 
     // Poll based on user's selected interval (in seconds)
     if (pollingInterval > 0) {
-      const interval = setInterval(() => fetchData(false), pollingInterval * 1000);
+      const interval = setInterval(() => doFetch(false), pollingInterval * 1000);
       return () => clearInterval(interval);
     }
-  }, [connectedAddress, isMock, fetchData, pollingInterval]);
+  }, [connectedAddress, isMock, pollingInterval]);
 
   // Generate short address
   const shortAddress = connectedAddress
@@ -524,7 +553,7 @@ function OverviewTab({
           ) : (
             <div className="space-y-2">
               {transactions.map(tx => (
-                <TransactionItem key={tx.digest} tx={tx} suiPrice={suiPrice} currencySymbol={currencySymbol} />
+                <TransactionItem key={tx.digest} tx={tx} suiPrice={suiPrice} currencySymbol={currencySymbol} connectedAddress={connectedAddress} />
               ))}
             </div>
           )}
@@ -562,8 +591,11 @@ function StatCard({
 }
 
 // Transaction item component (avoids nested <a> issue)
-function TransactionItem({ tx, suiPrice, currencySymbol }: { tx: UserTransaction; suiPrice: number | null; currencySymbol: string }) {
+function TransactionItem({ tx, suiPrice, currencySymbol, connectedAddress }: { tx: UserTransaction; suiPrice: number | null; currencySymbol: string; connectedAddress: string | null }) {
   const router = useRouter();
+
+  // Use the hook to get the display title (decrypted if possible)
+  const displayTitle = useCampaignTitle(tx.campaignId, tx.campaignTitle, tx.isEncrypted, connectedAddress);
 
   const getGasPayerLabel = (gasPayedBy: UserTransaction['gasPayedBy']) => {
     if (gasPayedBy === 'user') return null;
@@ -588,7 +620,9 @@ function TransactionItem({ tx, suiPrice, currencySymbol }: { tx: UserTransaction
 
   const handleClick = () => {
     if (tx.campaignId) {
-      router.push(`/campaigns/${tx.campaignId}`);
+      const targetPath = `/campaigns/${tx.campaignId}`;
+      saveReferrer(targetPath);
+      router.push(targetPath);
     }
   };
 
@@ -639,9 +673,9 @@ function TransactionItem({ tx, suiPrice, currencySymbol }: { tx: UserTransaction
             </span>
           )}
         </div>
-        {tx.campaignTitle && (
-          <div className="text-sm text-gray-600 dark:text-gray-300 truncate" title={tx.campaignTitle}>
-            {tx.campaignTitle}
+        {displayTitle && (
+          <div className="text-sm text-gray-600 dark:text-gray-300 truncate" title={displayTitle}>
+            {displayTitle}
           </div>
         )}
         <div className="text-sm text-gray-500 dark:text-gray-400">

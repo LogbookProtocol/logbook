@@ -68,6 +68,14 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     return () => window.removeEventListener('zklogin-changed', loadZkLoginAddress);
   }, []);
 
+  // Determine back link text based on where user came from
+  const getBackLinkText = () => {
+    if (backLink.startsWith('/account')) {
+      return '← Back to account';
+    }
+    return '← Back to campaigns';
+  };
+
   // Get connected address (from wallet or zkLogin)
   const connectedAddress = account?.address || zkLoginAddress;
 
@@ -94,16 +102,16 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [decryptedResults, setDecryptedResults] = useState<QuestionResult[]>([]);
   const [decryptedResponses, setDecryptedResponses] = useState<CampaignResponseData[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'results' | 'responses'>(() => {
-    // On mobile (< md breakpoint: 768px), default to 'overview', on desktop default to 'results'
-    if (typeof window !== 'undefined') {
-      return window.innerWidth < 768 ? 'overview' : 'results';
-    }
-    return 'results'; // Server-side default
-  });
+  const [activeTab, setActiveTab] = useState<'overview' | 'results' | 'responses'>('results');
   const hasDecryptedResultsOnce = useRef(false);
   const hasAttemptedAutoUnlock = useRef(false); // Track if we've tried auto-unlock already
 
+  // Set default tab based on screen size after mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setActiveTab('overview');
+    }
+  }, []);
 
   // Re-render when date format changes
   useEffect(() => {
@@ -1090,8 +1098,8 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
 
         {/* Back link */}
         <div className="mt-6 text-center">
-          <Link href="/campaigns" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition text-sm">
-            ← Back to campaigns
+          <Link href={backLink} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition text-sm">
+            {getBackLinkText()}
           </Link>
         </div>
       </div>
@@ -1104,8 +1112,8 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-12 text-center">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Campaign not found</h1>
-        <Link href="/campaigns" className="text-cyan-600 dark:text-cyan-400 hover:underline">
-          ← Back to campaigns
+        <Link href={backLink} className="text-cyan-600 dark:text-cyan-400 hover:underline">
+          {getBackLinkText()}
         </Link>
       </div>
     );
@@ -1141,7 +1149,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
             href={backLink}
             className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition"
           >
-            ← Campaigns
+            {getBackLinkText()}
           </Link>
 
           {/* CTA Button - aligned to the right */}
@@ -1256,29 +1264,25 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                 </td>
                 <td className="px-4 py-2.5">
                   {campaign.isEncrypted ? (
-                    <div className="flex flex-col gap-1">
-                      <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                        Private
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                    <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Private
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
                         (Password-protected with end-to-end encryption)
                       </span>
-                    </div>
+                    </span>
                   ) : (
-                    <div className="flex flex-col gap-1">
-                      <span className="inline-flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                        </svg>
-                        Public
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                    <span className="inline-flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                      </svg>
+                      Public
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
                         (Anyone can view and participate)
                       </span>
-                    </div>
+                    </span>
                   )}
                 </td>
               </tr>
@@ -1587,29 +1591,25 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                 </td>
                 <td className="px-4 py-2.5">
                   {campaign.isEncrypted ? (
-                    <div className="flex flex-col gap-1">
-                      <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                        Private
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                    <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Private
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
                         (Password-protected with end-to-end encryption)
                       </span>
-                    </div>
+                    </span>
                   ) : (
-                    <div className="flex flex-col gap-1">
-                      <span className="inline-flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                        </svg>
-                        Public
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                    <span className="inline-flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                      </svg>
+                      Public
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
                         (Anyone can view and participate)
                       </span>
-                    </div>
+                    </span>
                   )}
                 </td>
               </tr>
@@ -2053,10 +2053,7 @@ function CampaignContent({ params }: { params: Promise<{ id: string }> }) {
                             href={getSuiscanTxUrl(resp.txHash)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={isCurrentUser
-                              ? "text-green-600 dark:text-green-400 hover:underline"
-                              : "text-cyan-600 dark:text-cyan-400 hover:underline"
-                            }
+                            className="text-cyan-600 dark:text-cyan-400 hover:underline"
                           >
                             ↗
                           </a>
