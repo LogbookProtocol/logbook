@@ -577,6 +577,36 @@ export default function NewCampaignPage() {
         <div className="rounded-xl bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] overflow-hidden mb-6">
           <table className="w-full text-sm">
             <tbody>
+              {/* Privacy Type row */}
+              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                  Privacy Type
+                </td>
+                <td className="px-4 py-2.5">
+                  {formData.accessMode === 'password_protected' ? (
+                    <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Private
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                        (Password-protected with end-to-end encryption)
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                      </svg>
+                      Public
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                        (Anyone can view and participate)
+                      </span>
+                    </span>
+                  )}
+                </td>
+              </tr>
+
               {/* Title row */}
               <tr className="border-b border-gray-200 dark:border-white/[0.06]">
                 <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
@@ -587,9 +617,21 @@ export default function NewCampaignPage() {
                 </td>
               </tr>
 
+              {/* Description row */}
+              {formData.description && (
+                <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                  <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
+                    Description
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">
+                    {formData.description}
+                  </td>
+                </tr>
+              )}
+
               {/* End Date row */}
               {formData.endDate && (
-                <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                <tr>
                   <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
                     End Date
                   </td>
@@ -598,52 +640,6 @@ export default function NewCampaignPage() {
                       {formatDate(formData.endDate)}
                       <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{getEndTimeDisplay(formData.endDate)}</span>
                     </span>
-                  </td>
-                </tr>
-              )}
-
-              {/* Privacy Type row */}
-              <tr className="border-b border-gray-200 dark:border-white/[0.06]">
-                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
-                  Privacy Type
-                </td>
-                <td className="px-4 py-2.5">
-                  {formData.accessMode === 'password_protected' ? (
-                    <div className="flex flex-col gap-1">
-                      <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                        Private
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        (Password-protected with end-to-end encryption)
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-1">
-                      <span className="inline-flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                        </svg>
-                        Public
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        (Anyone can view and participate)
-                      </span>
-                    </div>
-                  )}
-                </td>
-              </tr>
-
-              {/* Description row */}
-              {formData.description && (
-                <tr>
-                  <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.02]">
-                    Description
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">
-                    {formData.description}
                   </td>
                 </tr>
               )}
@@ -932,7 +928,10 @@ export default function NewCampaignPage() {
           currencySymbol={currencySymbol}
         />
         <button
-          onClick={() => setReviewMode(true)}
+          onClick={() => {
+            setReviewMode(true);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
           disabled={!isValid}
           className="sm:ml-auto px-8 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
@@ -1236,7 +1235,7 @@ function GasCostCalculator({
 
   return (
     <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-      <span className="hidden sm:inline">Gas for</span>
+      <span>Gas for</span>
       <input
         type="text"
         inputMode="numeric"
@@ -1249,7 +1248,7 @@ function GasCostCalculator({
         }}
         className="w-12 px-1.5 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition text-center text-sm"
       />
-      <span className="hidden sm:inline">users:</span>
+      <span>users:</span>
       {participants > 0 ? (
         <span className="font-medium text-gray-700 dark:text-gray-300">
           ~{currencySymbol}{totalCostFiat.toFixed(3)} <span className="text-gray-400">({totalCostSui.toFixed(3)} SUI)</span>

@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FloatingBlocks } from '@/components/FloatingBlocks';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,30 +10,6 @@ export function HeroSection() {
   const router = useRouter();
   const { requireAuth } = useAuth();
   const { isMobile } = useDevice();
-  const [showTagline, setShowTagline] = useState(false);
-  const hasScrolled = useRef(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      const atTop = currentScrollY < 10;
-
-      // Show tagline when scrolling down (first scroll)
-      if (!hasScrolled.current && currentScrollY > 50) {
-        hasScrolled.current = true;
-        setShowTagline(true);
-      }
-
-      // Return to Logbook when back at top
-      if (atTop && hasScrolled.current) {
-        hasScrolled.current = false;
-        setShowTagline(false);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   return (
     <section
@@ -60,40 +35,26 @@ export function HeroSection() {
           </a>
         </div>
         <div
-          className="font-bold mb-8 tracking-tight leading-[1.05] select-none cursor-pointer relative"
+          className="font-bold mb-8 tracking-tight leading-[1.05] select-none relative"
           style={{ fontSize: 'clamp(4.25rem, 10vw, 8rem)' }}
-          onClick={() => setShowTagline(!showTagline)}
         >
-          {/* Invisible spacer for height */}
+          {/* Invisible spacer for height (4 lines) */}
           <div className="invisible" aria-hidden="true">
             <span className="block">Verifiable.</span>
             <span className="block">Logbook</span>
+            <span className="block">Immutable.</span>
             <span className="block">Permanent.</span>
           </div>
-          {/* Verifiable - gray version */}
+          {/* Verifiable - gray */}
           <span
-            className={`absolute left-0 right-0 text-center text-gray-100 dark:text-gray-900 transition-opacity duration-[2000ms] ${showTagline ? 'opacity-0' : 'opacity-100'}`}
+            className="absolute left-0 right-0 text-center text-gray-200 dark:text-gray-800 blur-[2px]"
             style={{ top: 0 }}
           >
             Verifiable.
           </span>
-          {/* Verifiable - gradient version */}
+          {/* Logbook - gradient with shimmer effect (second line) */}
           <span
-            className={`absolute left-0 right-0 text-center bg-gradient-to-b from-cyan-400 to-blue-500 bg-clip-text text-transparent transition-opacity duration-[2000ms] ${showTagline ? 'opacity-100' : 'opacity-0'}`}
-            style={{ top: 0 }}
-          >
-            Verifiable.
-          </span>
-          {/* Permanent - MUST be before Logbook in DOM so Logbook renders on top */}
-          <span
-            className={`absolute left-0 right-0 text-center text-gray-100 dark:text-gray-900 transition-opacity duration-[2000ms] ${showTagline ? 'opacity-0' : 'opacity-100'}`}
-            style={{ top: 'calc(1.05em * 2)' }}
-          >
-            Permanent.
-          </span>
-          {/* Logbook - last so it renders on top, with shimmer effect */}
-          <span
-            className={`absolute left-0 right-0 text-center transition-opacity duration-[2000ms] ${showTagline ? 'opacity-0' : 'opacity-100'}`}
+            className="absolute left-0 right-0 text-center"
             style={{ top: '1.05em', paddingBottom: '0.15em', marginBottom: '-0.15em' }}
           >
             {/* Base gradient text */}
@@ -111,13 +72,20 @@ export function HeroSection() {
               Logbook
             </span>
           </span>
-
-          {/* Gradient group: Verifiable / Immutable / Permanent - shared gradient */}
-          <div className={`absolute inset-0 bg-gradient-to-b from-cyan-400 to-blue-500 bg-clip-text transition-opacity duration-[2000ms] ${showTagline ? 'opacity-100' : 'opacity-0'}`}>
-            <span className="block text-transparent">Verifiable.</span>
-            <span className="block text-transparent">Immutable.</span>
-            <span className="block text-transparent">Permanent.</span>
-          </div>
+          {/* Immutable - gray */}
+          <span
+            className="absolute left-0 right-0 text-center text-gray-200 dark:text-gray-800 blur-[2px]"
+            style={{ top: 'calc(1.05em * 2)' }}
+          >
+            Immutable.
+          </span>
+          {/* Permanent - gray */}
+          <span
+            className="absolute left-0 right-0 text-center text-gray-200 dark:text-gray-800 blur-[2px]"
+            style={{ top: 'calc(1.05em * 3)' }}
+          >
+            Permanent.
+          </span>
         </div>
 
         <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 mb-12 max-w-[420px] mx-auto leading-relaxed">
