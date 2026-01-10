@@ -220,16 +220,25 @@ export async function fetchCampaignsByCreator(creatorAddress: string): Promise<C
         return convertCampaign(content.fields, obj.data!.objectId);
       });
   } catch (error) {
+    console.error('[fetchCampaignsByCreator] Error caught:', error);
+    console.error('[fetchCampaignsByCreator] Error type:', typeof error);
     console.error('[fetchCampaignsByCreator] Error details:', {
-      error,
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+      cause: error instanceof Error ? (error as any).cause : undefined,
       config: {
         rpcUrl: config.rpcUrl,
         registryId: config.registryId,
         network: config.network,
       }
     });
+    // Try to stringify the error to see all properties
+    try {
+      console.error('[fetchCampaignsByCreator] Error stringified:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    } catch (e) {
+      console.error('[fetchCampaignsByCreator] Could not stringify error');
+    }
     return [];
   }
 }
