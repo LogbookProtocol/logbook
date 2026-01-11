@@ -2,11 +2,17 @@ import { genAddressSeed, computeZkLoginAddress, getZkLoginSignature, getExtended
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { SuiClient } from '@mysten/sui/client';
 import { toBase64 } from '@mysten/sui/utils';
+import { EnokiClient } from '@mysten/enoki';
 
 const GOOGLE_CLIENT_ID = '677620785976-lcr0umvoh8tt4fckjblfuvnipev0sle8.apps.googleusercontent.com';
-// Use Mysten Labs production prover for testnet/mainnet (different zkey than devnet)
-const PROVER_URL = 'https://prover.mystenlabs.com/v1';
+// Use Enoki for zkLogin proving on testnet/mainnet
+const ENOKI_API_KEY = 'enoki_public_6e22d6830821bed0a1953f57326a811e';
 const SUI_NETWORK_URL = 'https://fullnode.testnet.sui.io:443';
+
+// Initialize Enoki client
+const enokiClient = new EnokiClient({
+  apiKey: ENOKI_API_KEY,
+});
 
 export type OAuthProvider = 'google';
 
@@ -214,7 +220,7 @@ export function clearZkLoginStorage() {
 }
 
 /**
- * Fetches the ZK proof from Mysten Labs prover service
+ * Fetches the ZK proof from Enoki prover service
  */
 export async function fetchZkProof(jwt: string): Promise<any> {
   const ephemeralKeyPair = getEphemeralKeyPair();
@@ -248,40 +254,33 @@ export async function fetchZkProof(jwt: string): Promise<any> {
     throw new Error('Ephemeral key mismatch. Please re-login with Google.');
   }
 
-  console.log('Fetching ZK proof from prover...', {
+  console.log('Fetching ZK proof from Enoki...', {
     maxEpoch,
     extendedEphemeralPublicKey,
     randomness: randomness.toString(),
     salt: userSalt.toString(),
   });
 
-  const response = await fetch(PROVER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  try {
+    // Use Enoki client to create zkLogin proof
+    const zkProof = await enokiClient.createZkLoginZkp({
       jwt,
-      extendedEphemeralPublicKey,
+      ephemeralPublicKey: ephemeralPublicKey,
       maxEpoch,
-      jwtRandomness: randomness.toString(),
-      salt: userSalt.toString(),
-      keyClaimName: 'sub',
-    }),
-  });
+      randomness: randomness.toString(),
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('Prover error:', error);
-    throw new Error(`Failed to get ZK proof: ${error}`);
+    console.log('Received ZK proof from Enoki:', JSON.stringify(zkProof, null, 2));
+    console.log('proofPoints.a:', zkProof.proofPoints?.a);
+    console.log('proofPoints.b:', zkProof.proofPoints?.b);
+    console.log('proofPoints.c:', zkProof.proofPoints?.c);
+    console.log('issBase64Details:', zkProof.issBase64Details);
+    console.log('headerBase64:', zkProof.headerBase64);
+    return zkProof;
+  } catch (error) {
+    console.error('Enoki prover error:', error);
+    throw new Error(`Failed to get ZK proof: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  const zkProof = await response.json();
-  console.log('Received ZK proof:', JSON.stringify(zkProof, null, 2));
-  console.log('proofPoints.a:', zkProof.proofPoints?.a);
-  console.log('proofPoints.b:', zkProof.proofPoints?.b);
-  console.log('proofPoints.c:', zkProof.proofPoints?.c);
-  console.log('issBase64Details:', zkProof.issBase64Details);
-  console.log('headerBase64:', zkProof.headerBase64);
-  return zkProof;
 }
 
 /**
