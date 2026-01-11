@@ -892,22 +892,10 @@ export default function NewCampaignPage() {
       {/* Questions Section */}
       <div className="mb-6" ref={questionsSectionRef}>
         {/* Section Header */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="mb-3">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Questions {formData.questions.length > 0 && <span className="text-gray-400 font-normal">({formData.questions.length})</span>}
           </label>
-          {formData.questions.length > 0 && (
-            <button
-              type="button"
-              onClick={handleAddQuestion}
-              className="text-sm font-medium text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition flex items-center gap-1"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add
-            </button>
-          )}
         </div>
 
         {formData.questions.length === 0 ? (
@@ -1239,13 +1227,13 @@ function QuestionRow({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+        <div className="flex items-center gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
             }}
-            className="p-2 text-gray-400 hover:text-red-500 transition rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10"
+            className="p-2 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10"
             title="Delete"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
