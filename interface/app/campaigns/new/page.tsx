@@ -503,16 +503,14 @@ export default function NewCampaignPage() {
         setEditingQuestionId(savedEditingId);
       }
 
-      // Restore focus based on saved field
+      // Restore focus based on saved field (only if explicitly saved, not on fresh start)
       setTimeout(() => {
         if (savedFocusField === 'title') {
           titleInputRef.current?.focus();
         } else if (savedFocusField === 'description') {
           descriptionInputRef.current?.focus();
-        } else if (!hasAnyData && !savedEditingId) {
-          // Focus on title only if form is completely empty (fresh start)
-          titleInputRef.current?.focus();
         }
+        // Don't auto-focus on fresh start - let user choose privacy type first
         // Clear saved focus state after restoring
         localStorage.removeItem('logbook_focus_field');
         localStorage.removeItem('logbook_editing_question_id');
