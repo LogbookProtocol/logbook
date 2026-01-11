@@ -159,7 +159,7 @@ export function DatePicker({ value, onChange, placeholder = 'Select date', class
   const endTimeDisplay = value && showEndTime ? getEndTimeDisplay(value) : '';
 
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative scroll-mt-16 ${className}`}>
       {/* Display field */}
       <button
         type="button"

@@ -222,7 +222,7 @@ function LayoutContent({ children }: { children: ReactNode }) {
       {/* Beta Banner */}
       <div
         ref={bannerRef}
-        className={`fixed top-0 left-0 right-0 bg-green-950 text-green-500 text-xs sm:text-sm text-center py-1.5 px-4 whitespace-nowrap ${
+        className={`fixed top-0 left-0 right-0 bg-green-950 text-green-500 text-xs text-center py-1.5 px-4 whitespace-nowrap ${
           shouldAnimateHeader ? 'transition-opacity duration-[3000ms] ease-out' : ''
         } ${headerVisible ? 'opacity-100' : 'opacity-0'}`}
         style={{ zIndex: 52 }}

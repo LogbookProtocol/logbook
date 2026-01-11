@@ -1071,7 +1071,7 @@ function QuestionRow({
   // Expanded edit mode
   if (isEditing) {
     return (
-      <div data-question-id={question.id} className="rounded-xl border-2 border-cyan-500 bg-white dark:bg-white/[0.02] overflow-hidden">
+      <div data-question-id={question.id} className="scroll-mt-16 rounded-xl border-2 border-cyan-500 bg-white dark:bg-white/[0.02] overflow-hidden">
         <div className="p-4 space-y-4">
           {/* Question number and text input */}
           <div className="flex items-start gap-3">
@@ -1196,7 +1196,16 @@ function QuestionRow({
         </div>
 
         {/* Actions bar */}
-        <div className="flex items-center justify-end px-4 py-3 bg-gray-50 dark:bg-white/[0.02] border-t border-gray-100 dark:border-white/5">
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-white/[0.02] border-t border-gray-100 dark:border-white/5">
+          <button
+            onClick={onDelete}
+            className="text-sm text-gray-400 hover:text-red-500 transition flex items-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
           <button
             onClick={onSave}
             className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:opacity-90 transition text-sm font-medium shadow-sm"
@@ -1213,7 +1222,7 @@ function QuestionRow({
     <div
       data-question-id={question.id}
       onClick={onEdit}
-      className="group rounded-xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] hover:border-cyan-500/50 transition cursor-pointer overflow-hidden"
+      className="scroll-mt-16 group rounded-xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] hover:border-cyan-500/50 transition cursor-pointer overflow-hidden"
     >
       <div className="flex items-center gap-3 p-4">
         {/* Question number */}
