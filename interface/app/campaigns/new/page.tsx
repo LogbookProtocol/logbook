@@ -111,25 +111,21 @@ export default function NewCampaignPage() {
   }, [editingQuestionId]);
 
   // Mobile: scroll input to top when focused (only on user interaction, not autofocus)
-  const userInteractedRef = useRef(false);
+  const pageLoadTimeRef = useRef(Date.now());
   useEffect(() => {
     if (!isMobile) return;
 
-    // Track user interaction to distinguish from autofocus
-    const handleInteraction = () => {
-      userInteractedRef.current = true;
-    };
-
     const handleFocus = (e: FocusEvent) => {
-      // Skip if user hasn't interacted yet (autofocus on page load)
-      if (!userInteractedRef.current) return;
-
       const target = e.target as HTMLElement;
       if (
         target.tagName === 'INPUT' ||
         target.tagName === 'TEXTAREA' ||
         target.tagName === 'SELECT'
       ) {
+        // Skip autofocus events that happen within 500ms of page load
+        const timeSinceLoad = Date.now() - pageLoadTimeRef.current;
+        if (timeSinceLoad < 500) return;
+
         // Small delay to let keyboard appear
         setTimeout(() => {
           const rect = target.getBoundingClientRect();
@@ -139,15 +135,8 @@ export default function NewCampaignPage() {
       }
     };
 
-    document.addEventListener('touchstart', handleInteraction, { once: true });
-    document.addEventListener('click', handleInteraction, { once: true });
     document.addEventListener('focusin', handleFocus);
-
-    return () => {
-      document.removeEventListener('touchstart', handleInteraction);
-      document.removeEventListener('click', handleInteraction);
-      document.removeEventListener('focusin', handleFocus);
-    };
+    return () => document.removeEventListener('focusin', handleFocus);
   }, [isMobile]);
 
   // Validation
@@ -958,6 +947,22 @@ export default function NewCampaignPage() {
           </div>
         )}
       </div>
+
+      {/* Add question button after questions list */}
+      {formData.questions.length > 0 && (
+        <div className="flex justify-end mb-6">
+          <button
+            type="button"
+            onClick={handleAddQuestion}
+            className="text-sm font-medium text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add
+          </button>
+        </div>
+      )}
 
       {/* Bottom bar: gas calculator + review button */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
