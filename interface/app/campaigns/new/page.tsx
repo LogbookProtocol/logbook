@@ -28,6 +28,7 @@ import {
 } from '@/lib/encryption-auto-recovery';
 import { parseZkLoginError, ZkLoginErrorInfo } from '@/lib/zklogin-utils';
 import { ZkLoginErrorAlert } from '@/components/ZkLoginErrorAlert';
+import { useDevice } from '@/hooks/useDevice';
 
 export default function NewCampaignPage() {
   const router = useRouter();
@@ -63,6 +64,8 @@ export default function NewCampaignPage() {
   const [txCostFiat, setTxCostFiat] = useState<number>(0);
   const [suiPrice, setSuiPrice] = useState<number>(0);
   const { currency, currencySymbol } = useCurrency();
+  const { isMobile } = useDevice();
+  const formContainerRef = useRef<HTMLDivElement>(null);
 
   // Deploy flow state: 'idle' | 'deploying' | 'success' | 'error'
   const [deployState, setDeployState] = useState<'idle' | 'deploying' | 'success' | 'error'>('idle');
@@ -106,6 +109,46 @@ export default function NewCampaignPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [editingQuestionId]);
+
+  // Mobile: scroll input to top when focused (only on user interaction, not autofocus)
+  const userInteractedRef = useRef(false);
+  useEffect(() => {
+    if (!isMobile) return;
+
+    // Track user interaction to distinguish from autofocus
+    const handleInteraction = () => {
+      userInteractedRef.current = true;
+    };
+
+    const handleFocus = (e: FocusEvent) => {
+      // Skip if user hasn't interacted yet (autofocus on page load)
+      if (!userInteractedRef.current) return;
+
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT'
+      ) {
+        // Small delay to let keyboard appear
+        setTimeout(() => {
+          const rect = target.getBoundingClientRect();
+          const scrollTop = window.scrollY + rect.top - 100; // 100px offset from top
+          window.scrollTo({ top: scrollTop, behavior: 'smooth' });
+        }, 300);
+      }
+    };
+
+    document.addEventListener('touchstart', handleInteraction, { once: true });
+    document.addEventListener('click', handleInteraction, { once: true });
+    document.addEventListener('focusin', handleFocus);
+
+    return () => {
+      document.removeEventListener('touchstart', handleInteraction);
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('focusin', handleFocus);
+    };
+  }, [isMobile]);
 
   // Validation
   const isValid = formData.title.trim() && formData.questions.length > 0;

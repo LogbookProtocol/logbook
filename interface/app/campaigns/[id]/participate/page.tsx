@@ -637,16 +637,77 @@ export default function CampaignParticipatePage({ params }: { params: Promise<{ 
     );
   }
 
+  // Fill with test data
+  const fillTestData = () => {
+    const testAnswers: Record<string, string | string[]> = {};
+    campaign.questions.forEach((q) => {
+      if (q.type === 'single-choice' && q.options && q.options.length > 0) {
+        // Pick random option for single choice
+        const randomIndex = Math.floor(Math.random() * q.options.length);
+        testAnswers[q.id] = q.options[randomIndex].id;
+      } else if (q.type === 'multiple-choice' && q.options && q.options.length > 0) {
+        // Pick 1-3 random options for multiple choice
+        const numToSelect = Math.min(Math.floor(Math.random() * 3) + 1, q.options.length);
+        const shuffled = [...q.options].sort(() => Math.random() - 0.5);
+        testAnswers[q.id] = shuffled.slice(0, numToSelect).map(o => o.id);
+      } else if (q.type === 'text') {
+        // Generate test text
+        const testTexts = [
+          'This is a test response.',
+          'Great question! Here is my answer.',
+          'I think this is important because...',
+          'My feedback on this topic.',
+          'Interesting point to consider.',
+        ];
+        testAnswers[q.id] = testTexts[Math.floor(Math.random() * testTexts.length)];
+      }
+    });
+    setAnswers(testAnswers);
+  };
+
+  // Clear all answers
+  const clearAnswers = () => {
+    setAnswers({});
+  };
+
   return (
     <div className="max-w-2xl mx-auto px-6 py-8">
       {/* Header */}
       <div className="mb-6">
-        <Link
-          href={backLink}
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition mb-3 inline-flex items-center gap-1"
-        >
-          ← Back
-        </Link>
+        <div className="flex items-center justify-between mb-3">
+          <Link
+            href={backLink}
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition inline-flex items-center gap-1"
+          >
+            ← Back
+          </Link>
+          {/* Test/Clear buttons */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={fillTestData}
+              className="flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-cyan-500 hover:bg-gray-100 dark:hover:bg-white/5 transition"
+              title="Fill with test data"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+              <span className="text-[10px] font-medium">Test</span>
+            </button>
+            <button
+              type="button"
+              onClick={clearAnswers}
+              className="flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/5 transition"
+              title="Clear answers"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20h-10.5l-4.21-4.3a1 1 0 010-1.41l10-10a1 1 0 011.41 0l5 5a1 1 0 010 1.41l-9.2 9.3" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 13.3l-6.3-6.3" />
+              </svg>
+              <span className="text-[10px] font-medium">Clear</span>
+            </button>
+          </div>
+        </div>
         <h1 className="text-2xl font-bold text-gray-900 dark:bg-gradient-to-b dark:from-white dark:to-gray-400 dark:bg-clip-text dark:text-transparent">{campaign.title}</h1>
         {campaign.description && (
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{campaign.description}</p>

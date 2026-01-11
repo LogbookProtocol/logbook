@@ -31,6 +31,8 @@ function LayoutContent({ children }: { children: ReactNode }) {
   const [bannerHeight, setBannerHeight] = useState(28);
   const [headerVisible, setHeaderVisible] = useState(false);
   const [shouldAnimateHeader, setShouldAnimateHeader] = useState(false);
+  const [mobileNavVisible, setMobileNavVisible] = useState(false);
+  const [shouldAnimateMobileNav, setShouldAnimateMobileNav] = useState(false);
   const authMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -128,16 +130,20 @@ function LayoutContent({ children }: { children: ReactNode }) {
     const hasNavigated = sessionStorage.getItem('logbook_has_navigated');
 
     if (isHomePage && isInitialLoadRef.current && !hasNavigated) {
-      // Fresh load on home page - animate header with delay
+      // Fresh load on home page - animate header and mobile nav with delay
       setShouldAnimateHeader(true);
-      // Trigger fade-in after 2 second delay
+      setShouldAnimateMobileNav(true);
+      // Trigger fade-in after 1 second delay
       setTimeout(() => {
         setHeaderVisible(true);
-      }, 2000);
+        setMobileNavVisible(true);
+      }, 1000);
     } else {
-      // Navigation or other page - show header immediately
+      // Navigation or other page - show header and mobile nav immediately
       setHeaderVisible(true);
+      setMobileNavVisible(true);
       setShouldAnimateHeader(false);
+      setShouldAnimateMobileNav(false);
     }
 
     // Mark that navigation has occurred
@@ -675,7 +681,12 @@ function LayoutContent({ children }: { children: ReactNode }) {
       {!isMobile && <Footer />}
 
       {/* Mobile Navigation */}
-      {isMobile && <MobileNavigation />}
+      {isMobile && (
+        <MobileNavigation
+          visible={mobileNavVisible}
+          shouldAnimate={shouldAnimateMobileNav}
+        />
+      )}
 
       {/* Connect Modal */}
       <ConnectOptionsModal
