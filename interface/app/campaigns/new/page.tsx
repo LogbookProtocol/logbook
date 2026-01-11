@@ -110,7 +110,7 @@ export default function NewCampaignPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [editingQuestionId]);
 
-  // Mobile: scroll input to top when focused (only on user interaction, not autofocus)
+  // Mobile: scroll input into view when focused (only on user interaction, not autofocus)
   const pageLoadTimeRef = useRef(Date.now());
   useEffect(() => {
     if (!isMobile) return;
@@ -126,12 +126,11 @@ export default function NewCampaignPage() {
         const timeSinceLoad = Date.now() - pageLoadTimeRef.current;
         if (timeSinceLoad < 500) return;
 
-        // Small delay to let keyboard appear
+        // Use scrollIntoView for better mobile compatibility
+        // Delay to let keyboard appear on iOS/Android
         setTimeout(() => {
-          const rect = target.getBoundingClientRect();
-          const scrollTop = window.scrollY + rect.top - 100; // 100px offset from top
-          window.scrollTo({ top: scrollTop, behavior: 'smooth' });
-        }, 300);
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 350);
       }
     };
 
