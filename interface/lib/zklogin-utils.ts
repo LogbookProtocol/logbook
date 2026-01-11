@@ -320,41 +320,22 @@ export async function signTransactionWithZkLogin(
     maxEpoch,
   });
 
-  // Get ZK proof
+  // Get ZK proof (includes addressSeed from Enoki)
   const zkProof = await fetchZkProof(jwt);
 
   // Sign transaction with ephemeral keypair
   const { signature: ephemeralSignature } = await ephemeralKeyPair.signTransaction(txBytes);
 
-  // Combine into zkLogin signature
-  const addressSeed = genAddressSeed(
-    userSalt,
-    'sub',
-    jwtPayload.sub,
-    aud
-  );
+  // Use addressSeed from Enoki response (they compute it with their salt service)
+  const addressSeed = zkProof.addressSeed;
+  console.log('Address seed from Enoki:', addressSeed);
 
-  console.log('Address seed for signature:', addressSeed.toString());
-
-  // Verify the address matches what we stored
-  const expectedAddress = computeZkLoginAddress({
-    userSalt,
-    claimName: 'sub',
-    claimValue: jwtPayload.sub,
-    aud,
-    iss: jwtPayload.iss,
-  });
   const storedAddress = localStorage.getItem('zklogin_address');
-  console.log('Expected address:', expectedAddress);
   console.log('Stored address:', storedAddress);
 
-  if (expectedAddress !== storedAddress) {
-    console.warn('Address mismatch! This may cause signature verification to fail.');
-  }
-
+  // zkProof already contains addressSeed from Enoki
   const inputs = {
     ...zkProof,
-    addressSeed: addressSeed.toString(),
   };
 
   console.log('zkLoginSignature inputs:', {

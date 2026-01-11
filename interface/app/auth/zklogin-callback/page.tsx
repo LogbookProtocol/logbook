@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { computeZkAddress, clearZkLoginStorage, getProviderFromStorage } from '@/lib/zklogin-utils';
+import { clearZkLoginStorage, getProviderFromStorage } from '@/lib/zklogin-utils';
 
 export default function ZkLoginCallback() {
   const router = useRouter();
@@ -37,11 +37,20 @@ export default function ZkLoginCallback() {
       console.log('JWT Payload:', jwtPayload);
       console.log('Email:', jwtPayload.email);
 
-      // Используем каноническую схему Sui zkLogin
-      // Адрес детерминированный: один Google аккаунт = один адрес
-      const zkAddress = await computeZkAddress(jwtPayload, provider);
+      // Get zkLogin address from Enoki (they manage the salt)
+      const addressResponse = await fetch('/api/zklogin/address', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jwt: idToken }),
+      });
 
-      console.log('Generated zkLogin address:', zkAddress);
+      if (!addressResponse.ok) {
+        const errorData = await addressResponse.json();
+        throw new Error(errorData.error || 'Failed to get zkLogin address');
+      }
+
+      const { address: zkAddress } = await addressResponse.json();
+      console.log('Got zkLogin address from Enoki:', zkAddress);
 
       // Сохраняем публичные данные в localStorage (безопасно)
       localStorage.setItem('zklogin_address', zkAddress);

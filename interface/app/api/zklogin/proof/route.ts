@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     });
 
     const zkProof = await enokiClient.createZkLoginZkp({
+      network: 'testnet',
       jwt,
       ephemeralPublicKey,
       maxEpoch,
@@ -43,11 +44,20 @@ export async function POST(request: NextRequest) {
     console.log('ZK proof created successfully');
 
     return NextResponse.json(zkProof);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Enoki zkLogin proof error:', error);
+    console.error('Error details:', {
+      message: error?.message,
+      status: error?.status,
+      code: error?.code,
+      errors: error?.errors,
+    });
+
+    // Return more detailed error info
+    const errorMessage = error?.errors?.[0]?.message || error?.message || 'Failed to create ZK proof';
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create ZK proof' },
-      { status: 500 }
+      { error: errorMessage, details: error?.errors },
+      { status: error?.status || 500 }
     );
   }
 }
