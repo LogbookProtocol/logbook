@@ -2,17 +2,9 @@ import { genAddressSeed, computeZkLoginAddress, getZkLoginSignature, getExtended
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { SuiClient } from '@mysten/sui/client';
 import { toBase64 } from '@mysten/sui/utils';
-import { EnokiClient } from '@mysten/enoki';
 
 const GOOGLE_CLIENT_ID = '677620785976-lcr0umvoh8tt4fckjblfuvnipev0sle8.apps.googleusercontent.com';
-// Use Enoki for zkLogin proving on testnet/mainnet
-const ENOKI_API_KEY = 'enoki_public_6e22d6830821bed0a1953f57326a811e';
 const SUI_NETWORK_URL = 'https://fullnode.testnet.sui.io:443';
-
-// Initialize Enoki client
-const enokiClient = new EnokiClient({
-  apiKey: ENOKI_API_KEY,
-});
 
 export type OAuthProvider = 'google';
 
@@ -254,23 +246,36 @@ export async function fetchZkProof(jwt: string): Promise<any> {
     throw new Error('Ephemeral key mismatch. Please re-login with Google.');
   }
 
-  console.log('Fetching ZK proof from Enoki...', {
+  console.log('Fetching ZK proof via API...', {
     maxEpoch,
-    extendedEphemeralPublicKey,
     randomness: randomness.toString(),
-    salt: userSalt.toString(),
   });
 
   try {
-    // Use Enoki client to create zkLogin proof
-    const zkProof = await enokiClient.createZkLoginZkp({
-      jwt,
-      ephemeralPublicKey: ephemeralPublicKey,
-      maxEpoch,
-      randomness: randomness.toString(),
+    // Get raw public key bytes and encode as base64
+    const publicKeyBytes = ephemeralPublicKey.toRawBytes();
+    const ephemeralPublicKeyBase64 = btoa(String.fromCharCode(...publicKeyBytes));
+
+    // Call our API route which uses the private Enoki key
+    const response = await fetch('/api/zklogin/proof', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jwt,
+        ephemeralPublicKeyBase64,
+        maxEpoch,
+        randomness: randomness.toString(),
+      }),
     });
 
-    console.log('Received ZK proof from Enoki:', JSON.stringify(zkProof, null, 2));
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get ZK proof');
+    }
+
+    const zkProof = await response.json();
+
+    console.log('Received ZK proof:', JSON.stringify(zkProof, null, 2));
     console.log('proofPoints.a:', zkProof.proofPoints?.a);
     console.log('proofPoints.b:', zkProof.proofPoints?.b);
     console.log('proofPoints.c:', zkProof.proofPoints?.c);
@@ -278,7 +283,7 @@ export async function fetchZkProof(jwt: string): Promise<any> {
     console.log('headerBase64:', zkProof.headerBase64);
     return zkProof;
   } catch (error) {
-    console.error('Enoki prover error:', error);
+    console.error('ZK proof error:', error);
     throw new Error(`Failed to get ZK proof: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
