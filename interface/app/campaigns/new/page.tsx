@@ -102,7 +102,10 @@ export default function NewCampaignPage() {
   // Close question editor when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (editingQuestionId && questionsSectionRef.current && !questionsSectionRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking "Add question" button
+      if (target.closest('[data-add-question]')) return;
+      if (editingQuestionId && questionsSectionRef.current && !questionsSectionRef.current.contains(target)) {
         setEditingQuestionId(null);
       }
     };
@@ -129,7 +132,7 @@ export default function NewCampaignPage() {
         // Use scrollIntoView for better mobile compatibility
         // Delay to let keyboard appear on iOS/Android
         setTimeout(() => {
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 350);
       }
     };
@@ -137,6 +140,19 @@ export default function NewCampaignPage() {
     document.addEventListener('focusin', handleFocus);
     return () => document.removeEventListener('focusin', handleFocus);
   }, [isMobile]);
+
+  // Mobile: scroll to editing question when it opens
+  useEffect(() => {
+    if (!isMobile || !editingQuestionId) return;
+
+    // Find the question element and scroll to it
+    setTimeout(() => {
+      const questionElement = questionsSectionRef.current?.querySelector(`[data-question-id="${editingQuestionId}"]`);
+      if (questionElement) {
+        questionElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  }, [isMobile, editingQuestionId]);
 
   // Validation
   const isValid = formData.title.trim() && formData.questions.length > 0;
@@ -940,6 +956,7 @@ export default function NewCampaignPage() {
         <div className="flex justify-end mb-6">
           <button
             type="button"
+            data-add-question
             onClick={handleAddQuestion}
             className="text-sm font-medium text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition flex items-center gap-1"
           >
@@ -1054,7 +1071,7 @@ function QuestionRow({
   // Expanded edit mode
   if (isEditing) {
     return (
-      <div className="rounded-xl border-2 border-cyan-500 bg-white dark:bg-white/[0.02] overflow-hidden">
+      <div data-question-id={question.id} className="rounded-xl border-2 border-cyan-500 bg-white dark:bg-white/[0.02] overflow-hidden">
         <div className="p-4 space-y-4">
           {/* Question number and text input */}
           <div className="flex items-start gap-3">
@@ -1069,11 +1086,21 @@ function QuestionRow({
               placeholder="Enter your question"
               autoFocus
             />
+            <button
+              type="button"
+              onClick={onDelete}
+              className="flex-shrink-0 p-2 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10"
+              title="Delete question"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
           </div>
 
           {/* Type selector and Required toggle */}
-          <div className="flex flex-wrap items-center gap-3 ml-10">
-            <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-white/5 rounded-lg">
+          <div className="flex items-center gap-2 ml-10">
+            <div className="flex items-center gap-0.5 p-0.5 bg-gray-100 dark:bg-white/5 rounded-md">
               {[
                 { type: 'single_choice' as QuestionType, label: 'Single' },
                 { type: 'multiple_choice' as QuestionType, label: 'Multiple' },
@@ -1083,7 +1110,7 @@ function QuestionRow({
                   key={opt.type}
                   type="button"
                   onClick={() => onUpdate({ type: opt.type })}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5 ${
+                  className={`px-2 py-1 rounded text-xs font-medium transition flex items-center gap-1 ${
                     question.type === opt.type
                       ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                       : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -1094,20 +1121,20 @@ function QuestionRow({
                 </button>
               ))}
             </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Required</span>
               <div
                 onClick={() => onUpdate({ required: !question.required })}
-                className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
+                className={`w-7 h-4 rounded-full transition-colors relative cursor-pointer ${
                   question.required ? 'bg-cyan-500' : 'bg-gray-300 dark:bg-gray-600'
                 }`}
               >
                 <div
-                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                    question.required ? 'translate-x-4' : 'translate-x-0.5'
+                  className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${
+                    question.required ? 'translate-x-3.5' : 'translate-x-0.5'
                   }`}
                 />
               </div>
-              <span className="text-gray-600 dark:text-gray-400">Required</span>
             </label>
           </div>
 
@@ -1169,16 +1196,7 @@ function QuestionRow({
         </div>
 
         {/* Actions bar */}
-        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-white/[0.02] border-t border-gray-100 dark:border-white/5">
-          <button
-            onClick={onDelete}
-            className="text-sm text-gray-400 hover:text-red-500 transition flex items-center gap-1.5"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            Delete
-          </button>
+        <div className="flex items-center justify-end px-4 py-3 bg-gray-50 dark:bg-white/[0.02] border-t border-gray-100 dark:border-white/5">
           <button
             onClick={onSave}
             className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:opacity-90 transition text-sm font-medium shadow-sm"
@@ -1193,6 +1211,7 @@ function QuestionRow({
   // Collapsed card view
   return (
     <div
+      data-question-id={question.id}
       onClick={onEdit}
       className="group rounded-xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] hover:border-cyan-500/50 transition cursor-pointer overflow-hidden"
     >

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { formatDate, getEndTimeDisplay } from '@/lib/format-date';
+import { useDevice } from '@/hooks/useDevice';
 
 interface DatePickerProps {
   value: string; // ISO format: YYYY-MM-DD
@@ -21,6 +22,7 @@ export function DatePicker({ value, onChange, placeholder = 'Select date', class
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [, forceUpdate] = useState(0);
+  const { isMobile } = useDevice();
 
   // Calendar state
   const today = new Date();
@@ -54,6 +56,15 @@ export function DatePicker({ value, onChange, placeholder = 'Select date', class
       setViewYear(date.getFullYear());
     }
   }, [value]);
+
+  // Mobile: scroll to picker when opened
+  useEffect(() => {
+    if (isOpen && isMobile && containerRef.current) {
+      setTimeout(() => {
+        containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [isOpen, isMobile]);
 
   const handleDateSelect = (day: number) => {
     const date = new Date(viewYear, viewMonth, day);
